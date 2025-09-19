@@ -2,110 +2,111 @@ import pygame
 import random
 import math
 
-# CONSTANTS
+# Sim constants
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
+SCREEN_COLOUR = (0, 0, 0)
+FPS = 60
+
+# Boid constants
 NUMBER_OF_BOIDS = 30
-SIZE = 5
+BOID_SIZE = 5
 GENERATION_MARGIN = 12 # The larger the number, the smaller the margin
 BOID_COLOUR = (255, 255, 255)
 LINEAR_VISUAL_RANGE = 50
 LINEAR_PROTECTED_RANGE = 20
-FPS = 60
-MAX_VELOCITY = 5
+MAX_SPEED = 5
 SEPERATION_FACTOR = 0.1
 MATCHING_FACTOR = 0.001
 CENTERING_FACTOR = 0.00001
 
-# Initialise Simulation class holding the pygame window data
-class Simulation():
-
+class Sim():
     def __init__(self):
         pygame.init()
-        screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-        clock = pygame.time.Clock()
-        vec = pygame.math.Vector2
+        self.running = False
+        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        self.clock = pygame.time.Clock()
+        self.vec = pygame.math.Vector2
+
+        # Title window
         pygame.display.set_caption("Boids Simulation")
 
+        # TODO: add window icon here
 
-class Boid():
-    def __init__(self):
-        self.x = random.randint(int(SCREEN_WIDTH / GENERATION_MARGIN), int((SCREEN_WIDTH / GENERATION_MARGIN) * (GENERATION_MARGIN - 1)))
-        self.y = random.randint(int(SCREEN_HEIGHT / GENERATION_MARGIN), int((SCREEN_HEIGHT / GENERATION_MARGIN) * (GENERATION_MARGIN - 1)))
-        self.position = vec(self.x, self.y)
-        self.vx = 1
-        self.vy = 1
-        self.velocity = vec(self.vx, self.vy)
-        self.size = SIZE
+        # Instantiate a container full of boids
+        self.boid_container = [Boid(self) for _ in range(NUMBER_OF_BOIDS)]
 
-    def get_position(self):
-        return self.position
+    # Event handler
+    def events(self):
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.running = False
 
-    def get_velocity(self):
-        return self.velocity
+    def step(self):
+        for boid in self.boid_container:
+            boid.step(self)
+        
+    def render(self):
+        # Wipe last screen
+        self.screen.fill(SCREEN_COLOUR)
 
-    def get_size(self):
-        return self.size
-
-
-    def reverse_vx(self):
-        self.velocity[0] = -self.velocity[0]
-
-    def reverse_vy(self):
-        self.velocity[1] = -self.velocity[1]
-
-    def update_velocity(self, avg_velocity, avg_position, close_delta):
-            self.velocity = self.velocity + ((avg_velocity - self.velocity) * MATCHING_FACTOR) + ((avg_position - self.position) * CENTERING_FACTOR)
-
-            self.velocity += close_delta * SEPERATION_FACTOR
-
-    def move(self):
-        # Ensure velocity doesn't exceed max velocity
-        if self.velocity.length() > MAX_VELOCITY:
-            self.velocity.scale_to_length(MAX_VELOCITY)
-
-        self.position += self.velocity
-
-    def bounce(self, x, y, offset):
-        # Boids wrap around edges of screen appearing on other side
-        if x + offset >= SCREEN_WIDTH or x - offset <= 0:
-            self.reverse_vx()
-        if y + offset >= SCREEN_HEIGHT or y - offset <= 0:
-            self.reverse_vy()
+        for boid in self.boid_container:
+            boid.draw(self.screen)
         
 
-# Instantiate a container full of boids
-boid_container = [Boid() for _ in range(NUMBER_OF_BOIDS)]
+    def run(self):
+        self.running = True
+        while self.running:
+            # Tick clock to limit FPS
+            self.clock.tick(FPS) 
 
-keep_running = True
-while keep_running:
+            # Check for any pygame events
+            self.events()
 
-    # Set background colour
-    screen.fill((0, 0, 0))
+            # Advance one step of simulation
+            self.step()
 
-    # Event handlers
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            keep_running = False
+            # Render boids
+            self.render()
 
-    # Render boids
-    for boid in boid_container:
+            # Swap buffers
+            pygame.display.flip()
 
+
+class BoidObject():
+    def __init__(self, sim, pos):
+        self.sim = sim
+        self.acc = sim.vec(0, 0)
+        self.vel = sim.vec(0, 0)
+        self.pos = sim.vec(pos)
+        self.speed = 1
+
+class Boid(BoidObject):
+    def __init__(self, sim):
+        pos = (random.randint(int(SCREEN_WIDTH / GENERATION_MARGIN), int((SCREEN_WIDTH / GENERATION_MARGIN) * (GENERATION_MARGIN - 1))), random.randint(int(SCREEN_HEIGHT / GENERATION_MARGIN), int((SCREEN_HEIGHT / GENERATION_MARGIN) * (GENERATION_MARGIN - 1))))
+        super().__init__(sim, pos)
+        self.speed = MAX_SPEED
+        self.vel = sim.vec(1, 1)
+
+    def draw(self, screen):
+        pygame.draw.circle(screen, BOID_COLOUR, self.pos, BOID_SIZE)
+
+    def step(self, sim):
         # Set all accumulator values to 0
         neighbours = 0
-        close_delta = vec(0, 0)
-        avg_velocity = vec(0, 0)
-        avg_position = vec(0, 0)
+        close_delta = sim.vec(0, 0)
+        avg_velocity = sim.vec(0, 0)
+        avg_position = sim.vec(0, 0)
 
-        for other_boid in boid_container:
+        for other_boid in sim.boid_container:
             
             # Ensure calculations are not done on matching boids
-            if boid == other_boid:
+            if self == other_boid:
                 pass
 
             else:
                 # Calculate difference in x and y coordinates 
-                position_delta = boid.get_position() - other_boid.get_position()
+                position_delta = self.pos - other_boid.pos
                 
                 squared_distance = position_delta.length()
                 squared_visual_range = math.sqrt((LINEAR_VISUAL_RANGE ** 2) * 2)
@@ -114,8 +115,8 @@ while keep_running:
                 if squared_distance < squared_visual_range:
 
                     
-                    avg_velocity += other_boid.get_velocity()
-                    avg_position += other_boid.get_position()
+                    avg_velocity += other_boid.vel
+                    avg_position += other_boid.pos
                     neighbours += 1
                     
                     squared_protected_range = math.sqrt((LINEAR_PROTECTED_RANGE ** 2) * 2)
@@ -130,20 +131,42 @@ while keep_running:
             avg_velocity = avg_velocity / neighbours
             avg_position = avg_position / neighbours
 
-        boid.update_velocity(avg_velocity, avg_position, close_delta)
+        self.update_velocity(avg_velocity, avg_position, close_delta)
             
-        boid.bounce(boid.get_position()[0], boid.get_position()[1], SIZE)
+        self.bounce(self.pos[0], self.pos[1], BOID_SIZE)
         
         # Increment positions by velocity
-        boid.move()
+        self.move()
 
-        # Render boid
-        pygame.draw.circle(screen, BOID_COLOUR, boid.get_position(), boid.get_size())
+    def update_velocity(self, avg_velocity, avg_position, close_delta):
+            self.vel = self.vel + ((avg_velocity - self.vel) * MATCHING_FACTOR) + ((avg_position - self.pos) * CENTERING_FACTOR)
 
-    # Swap buffers
-    pygame.display.flip()
+            self.vel += close_delta * SEPERATION_FACTOR
 
-    # Clock tick to limit FPS
-    clock.tick(FPS)
+    def move(self):
+        # Ensure velocity doesn't exceed max velocity
+        if self.vel.length() > MAX_SPEED:
+            self.vel.scale_to_length(MAX_SPEED)
 
-pygame.quit()
+        self.pos += self.vel
+
+    def bounce(self, x, y, offset):
+        # Boids wrap around edges of screen appearing on other side
+        if x + offset >= SCREEN_WIDTH or x - offset <= 0:
+            self.vel[0] = -self.vel[0]
+        if y + offset >= SCREEN_HEIGHT or y - offset <= 0:
+            self.vel[1] = -self.vel[1]
+
+    def seperation(self):
+        pass
+
+    def alignment(self):
+        pass
+
+    def cohesion(self):
+        pass
+        
+
+if __name__ == '__main__':
+    sim = Sim()
+    sim.run()
