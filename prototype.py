@@ -2,11 +2,10 @@ import pygame
 import random
 import math
 
-pygame.init()
-
+# CONSTANTS
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
-NUMBER_OF_BOIDS = 50
+NUMBER_OF_BOIDS = 30
 SIZE = 5
 GENERATION_MARGIN = 12 # The larger the number, the smaller the margin
 BOID_COLOUR = (255, 255, 255)
@@ -18,11 +17,15 @@ SEPERATION_FACTOR = 0.1
 MATCHING_FACTOR = 0.001
 CENTERING_FACTOR = 0.00001
 
-# Create window and name
-screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-clock = pygame.time.Clock()
-vec = pygame.math.Vector2
-pygame.display.set_caption("Boids Simulation")
+# Initialise Simulation class holding the pygame window data
+class Simulation():
+
+    def __init__(self):
+        pygame.init()
+        screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        clock = pygame.time.Clock()
+        vec = pygame.math.Vector2
+        pygame.display.set_caption("Boids Simulation")
 
 
 class Boid():
@@ -63,29 +66,13 @@ class Boid():
 
         self.position += self.velocity
 
-    def wrap(self, x, y, offset):
+    def bounce(self, x, y, offset):
         # Boids wrap around edges of screen appearing on other side
-        if x + offset >= SCREEN_WIDTH:
-            self.position[0] = 0
-        elif x - offset <= 0:
-            self.position[0] = SCREEN_WIDTH
-        if y + offset >= SCREEN_HEIGHT:
-            self.position[1] = 0
-        elif y - offset <= 0:
-            self.position[1] = SCREEN_HEIGHT
-
-    def toroidal(self, a, b):
-        dx = b[0] - a[0]
-        dy = b[1] - a[1]
-
-        # TODO: CHANGE CODE - CHATGPT INSPIRED
-
-        if abs(dx) > SCREEN_WIDTH / 2:
-            dx -= math.copysign(SCREEN_WIDTH, dx)
-        if abs(dy) > SCREEN_HEIGHT / 2:
-            dy -= math.copysign(SCREEN_HEIGHT, dy)
-
-        return vec(dx, dy)
+        if x + offset >= SCREEN_WIDTH or x - offset <= 0:
+            self.reverse_vx()
+        if y + offset >= SCREEN_HEIGHT or y - offset <= 0:
+            self.reverse_vy()
+        
 
 # Instantiate a container full of boids
 boid_container = [Boid() for _ in range(NUMBER_OF_BOIDS)]
@@ -118,7 +105,7 @@ while keep_running:
 
             else:
                 # Calculate difference in x and y coordinates 
-                position_delta = boid.toroidal(boid.get_position(), other_boid.get_position())
+                position_delta = boid.get_position() - other_boid.get_position()
                 
                 squared_distance = position_delta.length()
                 squared_visual_range = math.sqrt((LINEAR_VISUAL_RANGE ** 2) * 2)
@@ -145,7 +132,7 @@ while keep_running:
 
         boid.update_velocity(avg_velocity, avg_position, close_delta)
             
-        boid.wrap(boid.get_position()[0], boid.get_position()[1], SIZE)
+        boid.bounce(boid.get_position()[0], boid.get_position()[1], SIZE)
         
         # Increment positions by velocity
         boid.move()
