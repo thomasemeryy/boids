@@ -2,23 +2,23 @@ import pygame
 import random
 
 # Sim constants
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 600
+SCREEN_WIDTH = 1500
+SCREEN_HEIGHT = 900
 SCREEN_COLOUR = (0, 0, 0)
 FPS = 60
 
 # Boid constants
-NUMBER_OF_BOIDS = 30
+NUMBER_OF_BOIDS = 200
 BOID_SIZE = 5
 GENERATION_MARGIN = 12 # The larger the number, the smaller the margin
 BOID_COLOUR = (255, 255, 255)
 LINEAR_VISUAL_RANGE = 100
-LINEAR_PROTECTED_RANGE = 60
-MAX_SPEED = 3
+LINEAR_PROTECTED_RANGE = 20
+MAX_SPEED = 2
 MAX_ACC_REQUEST = 0.3
 SEPERATION_FACTOR = 2
-MATCHING_FACTOR = 0.001
-CENTERING_FACTOR = 0.00001
+ALIGNMENT_FACTOR = 1
+COHESION_FACTOR = 1
 
 class Sim():
     def __init__(self):
@@ -39,9 +39,56 @@ class Sim():
 
     # Event handler
     def events(self):
+            # TODO: STRICTLY FOR TESTING
+            global LINEAR_VISUAL_RANGE, LINEAR_PROTECTED_RANGE
+            global SEPERATION_FACTOR, ALIGNMENT_FACTOR, COHESION_FACTOR
+
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
+
+                # JUST FOR TESTING
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_UP:
+                        LINEAR_VISUAL_RANGE += 10
+                        print(f"LINEAR_VISUAL_RANGE = {LINEAR_VISUAL_RANGE}")
+
+                    elif event.key == pygame.K_DOWN:
+                        LINEAR_VISUAL_RANGE -= 10
+                        print(f"LINEAR_VISUAL_RANGE = {LINEAR_VISUAL_RANGE}")
+
+                    elif event.key == pygame.K_LEFT:
+                        LINEAR_PROTECTED_RANGE -= 10
+                        print(f"LINEAR_PROTECTED_RANGE = {LINEAR_PROTECTED_RANGE}")
+
+                    elif event.key == pygame.K_RIGHT:
+                        LINEAR_PROTECTED_RANGE += 10
+                        print(f"LINEAR_PROTECTED_RANGE = {LINEAR_PROTECTED_RANGE}")
+
+                    elif event.key == pygame.K_1:
+                        SEPERATION_FACTOR -= 0.1
+                        print(f"SEPERATION_FACTOR = {SEPERATION_FACTOR:.2f}")
+
+                    elif event.key == pygame.K_2:
+                        SEPERATION_FACTOR += 0.1
+                        print(f"SEPERATION_FACTOR = {SEPERATION_FACTOR:.2f}")
+
+                    elif event.key == pygame.K_3:
+                        ALIGNMENT_FACTOR -= 0.1
+                        print(f"ALIGNMENT_FACTOR = {ALIGNMENT_FACTOR:.2f}")
+
+                    elif event.key == pygame.K_4:
+                        ALIGNMENT_FACTOR += 0.1
+                        print(f"ALIGNMENT_FACTOR = {ALIGNMENT_FACTOR:.2f}")
+
+                    elif event.key == pygame.K_5:
+                        COHESION_FACTOR -= 0.1
+                        print(f"COHESION_FACTOR = {COHESION_FACTOR:.2f}")
+
+                    elif event.key == pygame.K_6:
+                        COHESION_FACTOR += 0.1
+                        print(f"COHESION_FACTOR = {COHESION_FACTOR:.2f}")
+
 
     def step(self):
         for boid in self.boid_container:
@@ -51,7 +98,7 @@ class Sim():
         # Wipe last screen
         self.screen.fill(SCREEN_COLOUR)
 
-        print(len(self.boid_container))
+        #print(len(self.boid_container))
 
         for boid in self.boid_container:
             boid.draw(self.screen)
@@ -75,9 +122,6 @@ class Sim():
             # Swap buffers
             pygame.display.flip()
 
-            for boid in self.boid_container:
-                print(boid.pos)
-
 # TODO: ABSTRACT CLASS?
 class BoidObject():
     def __init__(self, sim, pos):
@@ -88,16 +132,31 @@ class BoidObject():
         self.speed = 1
 
     def step(self):
-        print(f"Vel: {self.vel} // Acc: {self.acc} // Pos: {self.pos}")
+        #print(f"Vel: {self.vel} // Acc: {self.acc} // Pos: {self.pos}")
         self.vel += self.acc
         self.pos += self.vel
 
         self.acc = self.sim.vec(0, 0)
 
+        # BOUNCE
+        """
         if self.pos.x >= self.sim.window.w or self.pos.x <= 0:
             self.vel[0] = -self.vel[0]
         if self.pos.y >= self.sim.window.h or self.pos.y <= 0:
             self.vel[1] = -self.vel[1]
+        """
+
+        # WRAP
+        if self.pos.x > self.sim.window.w:
+            self.pos.x -= self.sim.window.w
+        elif self.pos.x < 0:
+            self.pos.x += self.sim.window.w
+
+        if self.pos.y > self.sim.window.h:
+            self.pos.y -= self.sim.window.h
+        elif self.pos.y < 0:
+            self.pos.y += self.sim.window.h
+        
 
 class Boid(BoidObject):
     def __init__(self, sim):
@@ -115,7 +174,9 @@ class Boid(BoidObject):
         # self.acc += self.limit_acceleration(self.alignment())
         # self.acc += self.limit_acceleration(self.cohesion())
 
-        self.acc += self.seperation()
+        self.acc += self.seperation() * SEPERATION_FACTOR
+        self.acc += self.alignment() * ALIGNMENT_FACTOR
+        self.acc += self.cohesion() * COHESION_FACTOR
 
         super().step()
 
@@ -167,11 +228,12 @@ class Boid(BoidObject):
         # Increment positions by velocity
         self.move()
         
-
+    """
     def update_velocity(self, avg_velocity, avg_position, close_delta):
             self.vel = self.vel + ((avg_velocity - self.vel) * MATCHING_FACTOR) + ((avg_position - self.pos) * CENTERING_FACTOR)
 
             self.vel += close_delta * SEPERATION_FACTOR
+    """
 
     def move(self):
         # Ensure velocity doesn't exceed max velocity
@@ -181,7 +243,7 @@ class Boid(BoidObject):
         self.pos += self.vel
 
     def seperation(self):
-        acc_request = self.sim.vec(0,0)
+        acc_request = self.sim.vec(0, 0)
         neighbouring_boids = self.boids_in_radius(LINEAR_PROTECTED_RANGE)
 
         if len(neighbouring_boids) == 0:
@@ -197,10 +259,34 @@ class Boid(BoidObject):
         return self.limit_force(acc_request, neighbouring_boids)
 
     def alignment(self):
-        pass
+        force = self.sim.vec(0, 0)
+        neighbouring_boids = self.boids_in_radius(LINEAR_VISUAL_RANGE)
+
+        if len(neighbouring_boids) == 0:
+            return force
+        
+        for neighbour in neighbouring_boids:
+            force += neighbour.vel
+
+        if force.length() == 0:
+            return force
+        
+        return self.limit_force(force, neighbouring_boids)
 
     def cohesion(self):
-        pass
+        force = self.sim.vec(0, 0)
+        neighbouring_boids = self.boids_in_radius(LINEAR_VISUAL_RANGE)
+
+        if len(neighbouring_boids) == 0:
+            return force
+        
+        for neighbour in neighbouring_boids:
+            force += (neighbour.pos - self.pos)
+
+        if force.length() == 0:
+            return force
+        
+        return self.limit_force(force, neighbouring_boids)
 
     def boids_in_radius(self, radius):
         boids_present = []
@@ -208,12 +294,12 @@ class Boid(BoidObject):
             if surrounding_boid == self:
                 pass
             else:
-                print(f"dist to: {self.pos.distance_to(surrounding_boid.pos)} // radius: {radius}")
+                #print(f"dist to: {self.pos.distance_to(surrounding_boid.pos)} // radius: {radius}")
 
                 if self.pos.distance_to(surrounding_boid.pos) < radius:
                     boids_present.append(surrounding_boid)
             
-        print(f"BOIDS IN RANGE: {len(boids_present)}")
+        #print(f"BOIDS IN RANGE: {len(boids_present)}")
         return boids_present
     
     """
