@@ -33,25 +33,19 @@ class GUI():
 
         window = self.__sim.get_window()
 
-        self.__sliders = {"protected_range": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 0), self.__slider_size), start_value=DEFAULT_PROTECTED_RANGE, value_range=(10, 100), manager=self.__manager), 
-                          "visual_range": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 1), self.__slider_size), start_value=DEFAULT_VISUAL_RANGE, value_range=(50, 300), manager=self.__manager),
-                          "seperation": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 2), self.__slider_size), start_value=DEFAULT_SEPERATION_FACTOR, value_range=(0.1, 3), manager=self.__manager),
-                          "alignment": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 3), self.__slider_size), start_value=DEFAULT_ALIGNMENT_FACTOR, value_range=(0.1, 3), manager=self.__manager),
-                          "cohesion": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 4), self.__slider_size), start_value=DEFAULT_COHESION_FACTOR, value_range=(0.1, 3), manager=self.__manager)}
+        self.__sliders = {"protected_range": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.__calculate_gui_pos(window, 0), self.__slider_size), start_value=DEFAULT_PROTECTED_RANGE, value_range=(10, 100), manager=self.__manager), 
+                          "visual_range": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.__calculate_gui_pos(window, 1), self.__slider_size), start_value=DEFAULT_VISUAL_RANGE, value_range=(50, 300), manager=self.__manager),
+                          "seperation": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.__calculate_gui_pos(window, 2), self.__slider_size), start_value=DEFAULT_SEPERATION_FACTOR, value_range=(0.1, 3), manager=self.__manager),
+                          "alignment": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.__calculate_gui_pos(window, 3), self.__slider_size), start_value=DEFAULT_ALIGNMENT_FACTOR, value_range=(0.1, 3), manager=self.__manager),
+                          "cohesion": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.__calculate_gui_pos(window, 4), self.__slider_size), start_value=DEFAULT_COHESION_FACTOR, value_range=(0.1, 3), manager=self.__manager)}
 
-        self.__slider_labels = {"protected_range": pygui.elements.UILabel(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 0, "label"), self.__slider_size), text=f"Protected Range: {self.__sim.protected_range}"),
-                                 "visual_range": pygui.elements.UILabel(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 1, "label"), self.__slider_size), text=f"Visual Range: {self.__sim.visual_range}"),
-                                 "seperation": pygui.elements.UILabel(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 2, "label"), self.__slider_size), text=f"Seperation: {self.__sim.seperation_factor:.2f}"),
-                                 "alignment": pygui.elements.UILabel(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 3, "label"), self.__slider_size), text=f"Alignment: {self.__sim.alignment_factor:.2f}"),
-                                 "cohesion": pygui.elements.UILabel(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 4, "label"), self.__slider_size), text=f"Cohesion: {self.__sim.cohesion_factor:.2f}")}
+        self.__slider_labels = {"protected_range": pygui.elements.UILabel(relative_rect=pyg.Rect(self.__calculate_gui_pos(window, 0, "label"), self.__slider_size), text=f"Protected Range: {DEFAULT_PROTECTED_RANGE}"),
+                                 "visual_range": pygui.elements.UILabel(relative_rect=pyg.Rect(self.__calculate_gui_pos(window, 1, "label"), self.__slider_size), text=f"Visual Range: {DEFAULT_VISUAL_RANGE}"),
+                                 "seperation": pygui.elements.UILabel(relative_rect=pyg.Rect(self.__calculate_gui_pos(window, 2, "label"), self.__slider_size), text=f"Seperation: {DEFAULT_SEPERATION_FACTOR:.2f}"),
+                                 "alignment": pygui.elements.UILabel(relative_rect=pyg.Rect(self.__calculate_gui_pos(window, 3, "label"), self.__slider_size), text=f"Alignment: {DEFAULT_ALIGNMENT_FACTOR:.2f}"),
+                                 "cohesion": pygui.elements.UILabel(relative_rect=pyg.Rect(self.__calculate_gui_pos(window, 4, "label"), self.__slider_size), text=f"Cohesion: {DEFAULT_COHESION_FACTOR:.2f}")}
 
-    def get_slider(self, slider):
-        return self.__sliders[slider]
-    
-    def get_slider_label(self, slider):
-        return self.__slider_labels[slider]
-
-    def calculate_gui_pos(self, window, n, type = "slider"):
+    def __calculate_gui_pos(self, window, n, type = "slider"):
         x = (window.w - (self.__gui_sliders * self.__slider_size[0]) - ((self.__gui_sliders - 1) * self.__gui_margin[0])) / 2 + (n * (self.__slider_size[0] + self.__gui_margin[0]))
         if type == "slider":
             y = window.y + self.__gui_margin[1]
@@ -59,7 +53,12 @@ class GUI():
             y = window.y + self.__gui_margin[1] + 35
 
         return (x, y)
-        
+
+    def get_slider(self, slider):
+        return self.__sliders[slider]
+    
+    def get_slider_label(self, slider):
+        return self.__slider_labels[slider]
 
     def process_gui_event(self, event):
         self.__manager.process_events(event)
@@ -80,12 +79,13 @@ class Sim():
         self.__screen = pyg.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         self.__clock = pyg.time.Clock()
         self.__window = self.__screen.get_rect()
+        self.__gui = GUI(self)
 
-        self.visual_range = DEFAULT_VISUAL_RANGE
-        self.protected_range = DEFAULT_PROTECTED_RANGE
-        self.seperation_factor = DEFAULT_SEPERATION_FACTOR
-        self.alignment_factor = DEFAULT_ALIGNMENT_FACTOR
-        self.cohesion_factor = DEFAULT_COHESION_FACTOR
+        self._config_values = {"visual_range": DEFAULT_VISUAL_RANGE, 
+                               "protected_range": DEFAULT_PROTECTED_RANGE,
+                               "seperation": DEFAULT_SEPERATION_FACTOR,
+                               "alignment": DEFAULT_ALIGNMENT_FACTOR,
+                               "cohesion": DEFAULT_COHESION_FACTOR}
 
         # Title window
         pyg.display.set_caption("Boids Simulation")
@@ -95,11 +95,14 @@ class Sim():
         # Instantiate a container full of boids
         self.boid_container = [Boid(self) for _ in range(NUMBER_OF_BOIDS)]
 
+    def get_config_value(self, type):
+        return self._config_values[type]
+
     def get_window(self):
         return self.__window
 
     # Event handler
-    def events(self, gui):
+    def handle_events(self, gui):
             for event in pyg.event.get():
                 if event.type == pyg.QUIT:
                     self.__running = False
@@ -120,38 +123,37 @@ class Sim():
     def update_gui_values(self, gui):
         # Add values from sliders to simulation instance
 
-        self.protected_range = gui.get_slider("protected_range").get_current_value()
-        self.visual_range = gui.get_slider("visual_range").get_current_value()
-        self.seperation_factor = gui.get_slider("seperation").get_current_value()
-        self.alignment_factor = gui.get_slider("alignment").get_current_value()
-        self.cohesion_factor = gui.get_slider("cohesion").get_current_value()
+        self._config_values["protected_range"] = gui.get_slider("protected_range").get_current_value()
+        self._config_values["visual_range"] = gui.get_slider("visual_range").get_current_value()
+        self._config_values["seperation"] = gui.get_slider("seperation").get_current_value()
+        self._config_values["alignment"] = gui.get_slider("alignment").get_current_value()
+        self._config_values["cohesion"] = gui.get_slider("cohesion").get_current_value()
 
-        gui.get_slider_label("protected_range").set_text(f"Protected Range: {self.protected_range}")
-        gui.get_slider_label("visual_range").set_text(f"Visual Range: {self.visual_range}")
-        gui.get_slider_label("seperation").set_text(f"Seperation: {self.seperation_factor:.2f}")
-        gui.get_slider_label("alignment").set_text(f"Alignment: {self.alignment_factor:.2f}")
-        gui.get_slider_label("cohesion").set_text(f"Cohesion: {self.cohesion_factor:.2f}")
+        gui.get_slider_label("protected_range").set_text(f"Protected Range: {self._config_values['protected_range']}")
+        gui.get_slider_label("visual_range").set_text(f"Visual Range: {self._config_values['visual_range']}")
+        gui.get_slider_label("seperation").set_text(f"Seperation: {self._config_values['seperation']:.2f}")
+        gui.get_slider_label("alignment").set_text(f"Alignment: {self._config_values['alignment']:.2f}")
+        gui.get_slider_label("cohesion").set_text(f"Cohesion: {self._config_values['cohesion']:.2f}")
 
-    def run(self, gui):
+    def run(self):
         self.__running = True
         while self.__running:
             # Tick clock to limit FPS
             time_delta = self.__clock.tick(FPS)/1000.0
 
             # Check for any pygame events
-            self.events(gui)
+            self.handle_events(self.__gui)
 
             # Update GUI
-            gui.update_gui(time_delta)
+            self.__gui.update_gui(time_delta)
 
             # Advance one step of simulation
             self.step()
-
-            self.update_gui_values(gui)
+            self.update_gui_values(self.__gui)
 
             # Render boids and GUI
             self.render()
-            gui.render_gui(self.__screen)
+            self.__gui.render_gui(self.__screen)
 
             # Swap buffers
             pyg.display.flip()
@@ -205,25 +207,25 @@ class Boid(BoidObject):
 
 
     def step(self):
-        self._acc += self.seperation() * self._sim.seperation_factor
-        self._acc += self.alignment() * self._sim.alignment_factor
-        self._acc += self.cohesion() * self._sim.cohesion_factor
+        self._acc += self.__seperation() * self._sim.get_config_value("seperation")
+        self._acc += self.__alignment() * self._sim.get_config_value("alignment")
+        self._acc += self.__cohesion() * self._sim.get_config_value("cohesion")
         super().step()
 
         # Increment positions by velocity
-        self.move()
+        self.__move()
         
 
-    def move(self):
+    def __move(self):
         # Ensure velocity doesn't exceed max velocity
         if self._vel.length() > MAX_SPEED:
             self._vel.scale_to_length(MAX_SPEED)
 
         self._pos += self._vel
 
-    def seperation(self):
+    def __seperation(self):
         acc_request = pyg.math.Vector2(0, 0)
-        neighbouring_boids = self.boids_in_radius(self._sim.protected_range)
+        neighbouring_boids = self.__boids_in_radius(self._sim.get_config_value("protected_range"))
 
         if len(neighbouring_boids) == 0:
             return acc_request
@@ -231,15 +233,15 @@ class Boid(BoidObject):
         for neighbour in neighbouring_boids:
             try:
                 dist_delta = self._pos - neighbour._pos
-                acc_request += (dist_delta) * (self._sim.protected_range / self._pos.distance_to(neighbour._pos))
+                acc_request += (dist_delta) * (self._sim.get_config_value("protected_range") / self._pos.distance_to(neighbour._pos))
             except ZeroDivisionError:
                 continue
 
-        return self.limit_force(acc_request, neighbouring_boids)
+        return self.__limit_force(acc_request, neighbouring_boids)
 
-    def alignment(self):
+    def __alignment(self):
         force = pyg.math.Vector2(0, 0)
-        neighbouring_boids = self.boids_in_radius(self._sim.visual_range)
+        neighbouring_boids = self.__boids_in_radius(self._sim.get_config_value("visual_range"))
 
         if len(neighbouring_boids) == 0:
             return force
@@ -250,11 +252,11 @@ class Boid(BoidObject):
         if force.length() == 0:
             return force
         
-        return self.limit_force(force, neighbouring_boids)
+        return self.__limit_force(force, neighbouring_boids)
 
-    def cohesion(self):
+    def __cohesion(self):
         force = pyg.math.Vector2(0, 0)
-        neighbouring_boids = self.boids_in_radius(self._sim.visual_range)
+        neighbouring_boids = self.__boids_in_radius(self._sim.get_config_value("visual_range"))
 
         if len(neighbouring_boids) == 0:
             return force
@@ -265,9 +267,9 @@ class Boid(BoidObject):
         if force.length() == 0:
             return force
         
-        return self.limit_force(force, neighbouring_boids)
+        return self.__limit_force(force, neighbouring_boids)
 
-    def boids_in_radius(self, radius):
+    def __boids_in_radius(self, radius):
         boids_present = []
         for surrounding_boid in self._sim.boid_container:
             if surrounding_boid == self:
@@ -279,7 +281,7 @@ class Boid(BoidObject):
             
         return boids_present
 
-    def limit_force(self, force, boids_in_radius):
+    def __limit_force(self, force, boids_in_radius):
         force /= len(boids_in_radius)
         if round(force.length(), 3) <= 0:
             return force
@@ -297,5 +299,4 @@ class Boid(BoidObject):
         
 if __name__ == '__main__':
     sim = Sim()
-    gui = GUI(sim)
-    sim.run(gui)
+    sim.run()
