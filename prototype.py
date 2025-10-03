@@ -4,28 +4,29 @@ import random
 import math
 import abc
 
-# Sim constants
-SCREEN_WIDTH = 1500
-SCREEN_HEIGHT = 900
-SCREEN_COLOUR = (0, 0, 0)
-FPS = 60
+class Config():
+    # Sim constants
+    SCREEN_WIDTH = 1500
+    SCREEN_HEIGHT = 900
+    SCREEN_COLOUR = (0, 0, 0)
+    FPS = 60
 
-# Boid constants
-NUMBER_OF_BOIDS = 200
-BOID_SIZE = 10
-GENERATION_MARGIN = 12 # The larger the number, the smaller the margin
-BOID_COLOUR = (255, 255, 255)
-DEFAULT_VISUAL_RANGE = 100
-DEFAULT_PROTECTED_RANGE = 20
-MAX_SPEED = 1
-MAX_ACC_REQUEST = 0.1
-DEFAULT_SEPERATION_FACTOR = 2
-DEFAULT_ALIGNMENT_FACTOR = 1
-DEFAULT_COHESION_FACTOR = 1
+    # Boid constants
+    NUMBER_OF_BOIDS = 200
+    BOID_SIZE = 10
+    GENERATION_MARGIN = 12 # The larger the number, the smaller the margin
+    BOID_COLOUR = (255, 255, 255)
+    DEFAULT_VISUAL_RANGE = 100
+    DEFAULT_PROTECTED_RANGE = 20
+    MAX_SPEED = 1
+    MAX_ACC_REQUEST = 0.1
+    DEFAULT_SEPERATION_FACTOR = 2
+    DEFAULT_ALIGNMENT_FACTOR = 1
+    DEFAULT_COHESION_FACTOR = 1
 
 class GUI():
     def __init__(self, sim):
-        self.__manager = pygui.UIManager((SCREEN_WIDTH, SCREEN_HEIGHT))
+        self.__manager = pygui.UIManager((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
         self.__gui_margin = (10, 20)
         self.__slider_size = (150, 40)
         self.__gui_sliders = 5
@@ -33,17 +34,17 @@ class GUI():
 
         window = self.__sim.get_window()
 
-        self.__sliders = {"protected_range": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.__calculate_gui_pos(window, 0), self.__slider_size), start_value=DEFAULT_PROTECTED_RANGE, value_range=(10, 100), manager=self.__manager), 
-                          "visual_range": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.__calculate_gui_pos(window, 1), self.__slider_size), start_value=DEFAULT_VISUAL_RANGE, value_range=(50, 300), manager=self.__manager),
-                          "seperation": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.__calculate_gui_pos(window, 2), self.__slider_size), start_value=DEFAULT_SEPERATION_FACTOR, value_range=(0.1, 3), manager=self.__manager),
-                          "alignment": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.__calculate_gui_pos(window, 3), self.__slider_size), start_value=DEFAULT_ALIGNMENT_FACTOR, value_range=(0.1, 3), manager=self.__manager),
-                          "cohesion": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.__calculate_gui_pos(window, 4), self.__slider_size), start_value=DEFAULT_COHESION_FACTOR, value_range=(0.1, 3), manager=self.__manager)}
+        self.__sliders = {"protected_range": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.__calculate_gui_pos(window, 0), self.__slider_size), start_value=Config.DEFAULT_PROTECTED_RANGE, value_range=(10, 100), manager=self.__manager), 
+                          "visual_range": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.__calculate_gui_pos(window, 1), self.__slider_size), start_value=Config.DEFAULT_VISUAL_RANGE, value_range=(50, 300), manager=self.__manager),
+                          "seperation": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.__calculate_gui_pos(window, 2), self.__slider_size), start_value=Config.DEFAULT_SEPERATION_FACTOR, value_range=(0.1, 3), manager=self.__manager),
+                          "alignment": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.__calculate_gui_pos(window, 3), self.__slider_size), start_value=Config.DEFAULT_ALIGNMENT_FACTOR, value_range=(0.1, 3), manager=self.__manager),
+                          "cohesion": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.__calculate_gui_pos(window, 4), self.__slider_size), start_value=Config.DEFAULT_COHESION_FACTOR, value_range=(0.1, 3), manager=self.__manager)}
 
-        self.__slider_labels = {"protected_range": pygui.elements.UILabel(relative_rect=pyg.Rect(self.__calculate_gui_pos(window, 0, "label"), self.__slider_size), text=f"Protected Range: {DEFAULT_PROTECTED_RANGE}"),
-                                 "visual_range": pygui.elements.UILabel(relative_rect=pyg.Rect(self.__calculate_gui_pos(window, 1, "label"), self.__slider_size), text=f"Visual Range: {DEFAULT_VISUAL_RANGE}"),
-                                 "seperation": pygui.elements.UILabel(relative_rect=pyg.Rect(self.__calculate_gui_pos(window, 2, "label"), self.__slider_size), text=f"Seperation: {DEFAULT_SEPERATION_FACTOR:.2f}"),
-                                 "alignment": pygui.elements.UILabel(relative_rect=pyg.Rect(self.__calculate_gui_pos(window, 3, "label"), self.__slider_size), text=f"Alignment: {DEFAULT_ALIGNMENT_FACTOR:.2f}"),
-                                 "cohesion": pygui.elements.UILabel(relative_rect=pyg.Rect(self.__calculate_gui_pos(window, 4, "label"), self.__slider_size), text=f"Cohesion: {DEFAULT_COHESION_FACTOR:.2f}")}
+        self.__slider_labels = {"protected_range": pygui.elements.UILabel(relative_rect=pyg.Rect(self.__calculate_gui_pos(window, 0, "label"), self.__slider_size), text=f"Protected Range: {Config.DEFAULT_PROTECTED_RANGE}"),
+                                 "visual_range": pygui.elements.UILabel(relative_rect=pyg.Rect(self.__calculate_gui_pos(window, 1, "label"), self.__slider_size), text=f"Visual Range: {Config.DEFAULT_VISUAL_RANGE}"),
+                                 "seperation": pygui.elements.UILabel(relative_rect=pyg.Rect(self.__calculate_gui_pos(window, 2, "label"), self.__slider_size), text=f"Seperation: {Config.DEFAULT_SEPERATION_FACTOR:.2f}"),
+                                 "alignment": pygui.elements.UILabel(relative_rect=pyg.Rect(self.__calculate_gui_pos(window, 3, "label"), self.__slider_size), text=f"Alignment: {Config.DEFAULT_ALIGNMENT_FACTOR:.2f}"),
+                                 "cohesion": pygui.elements.UILabel(relative_rect=pyg.Rect(self.__calculate_gui_pos(window, 4, "label"), self.__slider_size), text=f"Cohesion: {Config.DEFAULT_COHESION_FACTOR:.2f}")}
 
     def __calculate_gui_pos(self, window, n, type = "slider"):
         x = (window.w - (self.__gui_sliders * self.__slider_size[0]) - ((self.__gui_sliders - 1) * self.__gui_margin[0])) / 2 + (n * (self.__slider_size[0] + self.__gui_margin[0]))
@@ -76,16 +77,16 @@ class Sim():
     def __init__(self):
         pyg.init()
         self.__running = False
-        self.__screen = pyg.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-        self.__clock = pyg.time.Clock()
+        self.__screen = pyg.display.set_mode((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
         self.__window = self.__screen.get_rect()
+        self.__clock = pyg.time.Clock()
         self.__gui = GUI(self)
 
-        self._config_values = {"visual_range": DEFAULT_VISUAL_RANGE, 
-                               "protected_range": DEFAULT_PROTECTED_RANGE,
-                               "seperation": DEFAULT_SEPERATION_FACTOR,
-                               "alignment": DEFAULT_ALIGNMENT_FACTOR,
-                               "cohesion": DEFAULT_COHESION_FACTOR}
+        self._config_values = {"visual_range": Config.DEFAULT_VISUAL_RANGE, 
+                               "protected_range": Config.DEFAULT_PROTECTED_RANGE,
+                               "seperation": Config.DEFAULT_SEPERATION_FACTOR,
+                               "alignment": Config.DEFAULT_ALIGNMENT_FACTOR,
+                               "cohesion": Config.DEFAULT_COHESION_FACTOR}
 
         # Title window
         pyg.display.set_caption("Boids Simulation")
@@ -93,7 +94,7 @@ class Sim():
         # TODO: add window icon here
 
         # Instantiate a container full of boids
-        self.boid_container = [Boid(self) for _ in range(NUMBER_OF_BOIDS)]
+        self.boid_container = [Boid(self) for _ in range(Config.NUMBER_OF_BOIDS)]
 
     def get_config_value(self, type):
         return self._config_values[type]
@@ -115,7 +116,7 @@ class Sim():
         
     def render(self):
         # Wipe last screen
-        self.__screen.fill(SCREEN_COLOUR)
+        self.__screen.fill(Config.SCREEN_COLOUR)
 
         for boid in self.boid_container:
             boid.draw(self.__screen)
@@ -139,7 +140,7 @@ class Sim():
         self.__running = True
         while self.__running:
             # Tick clock to limit FPS
-            time_delta = self.__clock.tick(FPS)/1000.0
+            time_delta = self.__clock.tick(Config.FPS)/1000.0
 
             # Check for any pygame events
             self.handle_events(self.__gui)
@@ -189,9 +190,9 @@ class BoidObject(abc.ABC):
 
 class Boid(BoidObject):
     def __init__(self, sim):
-        pos = (random.randint(int(SCREEN_WIDTH / GENERATION_MARGIN), int((SCREEN_WIDTH / GENERATION_MARGIN) * (GENERATION_MARGIN - 1))), random.randint(int(SCREEN_HEIGHT / GENERATION_MARGIN), int((SCREEN_HEIGHT / GENERATION_MARGIN) * (GENERATION_MARGIN - 1))))
+        pos = (random.randint(int(Config.SCREEN_WIDTH / Config.GENERATION_MARGIN), int((Config.SCREEN_WIDTH / Config.GENERATION_MARGIN) * (Config.GENERATION_MARGIN - 1))), random.randint(int(Config.SCREEN_HEIGHT / Config.GENERATION_MARGIN), int((Config.SCREEN_HEIGHT / Config.GENERATION_MARGIN) * (Config.GENERATION_MARGIN - 1))))
         super().__init__(sim, pos)
-        self._max_speed = MAX_SPEED
+        self._max_speed = Config.MAX_SPEED
         self._vel = pyg.math.Vector2(1, 1)
 
     def draw(self, screen):
@@ -199,11 +200,11 @@ class Boid(BoidObject):
         phi = math.atan2(self._vel.y, self._vel.x)
         phi2 = 0.75 * math.pi
 
-        pos1 = ((self._pos.x + (math.cos(phi) * BOID_SIZE), (self._pos.y + (math.sin(phi) * BOID_SIZE))))
-        pos2 = ((self._pos.x + (math.cos(phi + phi2) * BOID_SIZE), (self._pos.y + (math.sin(phi + phi2) * BOID_SIZE))))
-        pos3 = ((self._pos.x + (math.cos(phi - phi2) * BOID_SIZE), (self._pos.y + (math.sin(phi - phi2) * BOID_SIZE))))
+        pos1 = ((self._pos.x + (math.cos(phi) * Config.BOID_SIZE), (self._pos.y + (math.sin(phi) * Config.BOID_SIZE))))
+        pos2 = ((self._pos.x + (math.cos(phi + phi2) * Config.BOID_SIZE), (self._pos.y + (math.sin(phi + phi2) * Config.BOID_SIZE))))
+        pos3 = ((self._pos.x + (math.cos(phi - phi2) * Config.BOID_SIZE), (self._pos.y + (math.sin(phi - phi2) * Config.BOID_SIZE))))
 
-        pyg.draw.polygon(screen, BOID_COLOUR, (pos1, pos2, pos3))
+        pyg.draw.polygon(screen, Config.BOID_COLOUR, (pos1, pos2, pos3))
 
 
     def step(self):
@@ -218,8 +219,8 @@ class Boid(BoidObject):
 
     def __move(self):
         # Ensure velocity doesn't exceed max velocity
-        if self._vel.length() > MAX_SPEED:
-            self._vel.scale_to_length(MAX_SPEED)
+        if self._vel.length() > Config.MAX_SPEED:
+            self._vel.scale_to_length(Config.MAX_SPEED)
 
         self._pos += self._vel
 
@@ -291,8 +292,8 @@ class Boid(BoidObject):
         force.scale_to_length(1)
         force = force * self._max_speed - self._vel
 
-        if force.length() > MAX_ACC_REQUEST:
-            force.scale_to_length(MAX_ACC_REQUEST)
+        if force.length() > Config.MAX_ACC_REQUEST:
+            force.scale_to_length(Config.MAX_ACC_REQUEST)
         
         return force
 
