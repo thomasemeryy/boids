@@ -2,6 +2,7 @@ import pygame as pyg
 import pygame_gui as pygui
 import random
 import math
+import abc
 
 # Sim constants
 SCREEN_WIDTH = 1500
@@ -18,38 +19,73 @@ DEFAULT_VISUAL_RANGE = 100
 DEFAULT_PROTECTED_RANGE = 20
 MAX_SPEED = 1
 MAX_ACC_REQUEST = 0.1
-SEPERATION_FACTOR = 2
-ALIGNMENT_FACTOR = 1
-COHESION_FACTOR = 1
+DEFAULT_SEPERATION_FACTOR = 2
+DEFAULT_ALIGNMENT_FACTOR = 1
+DEFAULT_COHESION_FACTOR = 1
 
 class GUI():
-    def __init__(self):
-        self.manager = pygui.UIManager((SCREEN_WIDTH, SCREEN_HEIGHT))
+    def __init__(self, sim):
+        self.__manager = pygui.UIManager((SCREEN_WIDTH, SCREEN_HEIGHT))
+        self.__gui_margin = (10, 20)
+        self.__slider_size = (150, 40)
+        self.__gui_sliders = 5
+        self.__sim = sim
 
-        self.protected_range_slider = pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect((350, 275), (100, 50)), start_value=DEFAULT_PROTECTED_RANGE, value_range=(10, 100), manager=self.manager)
+        window = self.__sim.get_window()
 
+        self.__sliders = {"protected_range": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 0), self.__slider_size), start_value=DEFAULT_PROTECTED_RANGE, value_range=(10, 100), manager=self.__manager), 
+                          "visual_range": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 1), self.__slider_size), start_value=DEFAULT_VISUAL_RANGE, value_range=(50, 300), manager=self.__manager),
+                          "seperation": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 2), self.__slider_size), start_value=DEFAULT_SEPERATION_FACTOR, value_range=(0.1, 3), manager=self.__manager),
+                          "alignment": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 3), self.__slider_size), start_value=DEFAULT_ALIGNMENT_FACTOR, value_range=(0.1, 3), manager=self.__manager),
+                          "cohesion": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 4), self.__slider_size), start_value=DEFAULT_COHESION_FACTOR, value_range=(0.1, 3), manager=self.__manager)}
+
+        self.__slider_labels = {"protected_range": pygui.elements.UILabel(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 0, "label"), self.__slider_size), text=f"Protected Range: {self.__sim.protected_range}"),
+                                 "visual_range": pygui.elements.UILabel(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 1, "label"), self.__slider_size), text=f"Visual Range: {self.__sim.visual_range}"),
+                                 "seperation": pygui.elements.UILabel(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 2, "label"), self.__slider_size), text=f"Seperation: {self.__sim.seperation_factor:.2f}"),
+                                 "alignment": pygui.elements.UILabel(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 3, "label"), self.__slider_size), text=f"Alignment: {self.__sim.alignment_factor:.2f}"),
+                                 "cohesion": pygui.elements.UILabel(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 4, "label"), self.__slider_size), text=f"Cohesion: {self.__sim.cohesion_factor:.2f}")}
+
+    def get_slider(self, slider):
+        return self.__sliders[slider]
+    
+    def get_slider_label(self, slider):
+        return self.__slider_labels[slider]
+
+    def calculate_gui_pos(self, window, n, type = "slider"):
+        x = (window.w - (self.__gui_sliders * self.__slider_size[0]) - ((self.__gui_sliders - 1) * self.__gui_margin[0])) / 2 + (n * (self.__slider_size[0] + self.__gui_margin[0]))
+        if type == "slider":
+            y = window.y + self.__gui_margin[1]
+        elif type == "label":
+            y = window.y + self.__gui_margin[1] + 35
+
+        return (x, y)
+        
 
     def process_gui_event(self, event):
-        self.manager.process_events(event)
+        self.__manager.process_events(event)
 
         if event.type == pygui.UI_HORIZONTAL_SLIDER_MOVED:
-          if event.ui_element == self.protected_range_slider:
-              print('current slider value:', event.value)
+          pass
 
     def update_gui(self, time_delta):
-        self.manager.update(time_delta)
+        self.__manager.update(time_delta)
 
     def render_gui(self, screen):
-        self.manager.draw_ui(screen)
+        self.__manager.draw_ui(screen)
 
 class Sim():
     def __init__(self):
         pyg.init()
-        self.running = False
-        self.screen = pyg.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-        self.clock = pyg.time.Clock()
-        self.vec = pyg.math.Vector2
-        self.window = self.screen.get_rect()
+        self.__running = False
+        self.__screen = pyg.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        self.__clock = pyg.time.Clock()
+        self.__window = self.__screen.get_rect()
+
+        self.visual_range = DEFAULT_VISUAL_RANGE
+        self.protected_range = DEFAULT_PROTECTED_RANGE
+        self.seperation_factor = DEFAULT_SEPERATION_FACTOR
+        self.alignment_factor = DEFAULT_ALIGNMENT_FACTOR
+        self.cohesion_factor = DEFAULT_COHESION_FACTOR
 
         # Title window
         pyg.display.set_caption("Boids Simulation")
@@ -59,11 +95,14 @@ class Sim():
         # Instantiate a container full of boids
         self.boid_container = [Boid(self) for _ in range(NUMBER_OF_BOIDS)]
 
+    def get_window(self):
+        return self.__window
+
     # Event handler
     def events(self, gui):
             for event in pyg.event.get():
                 if event.type == pyg.QUIT:
-                    self.running = False
+                    self.__running = False
 
                 gui.process_gui_event(event)
                 
@@ -73,17 +112,31 @@ class Sim():
         
     def render(self):
         # Wipe last screen
-        self.screen.fill(SCREEN_COLOUR)
+        self.__screen.fill(SCREEN_COLOUR)
 
         for boid in self.boid_container:
-            boid.draw(self.screen)
+            boid.draw(self.__screen)
         
+    def update_gui_values(self, gui):
+        # Add values from sliders to simulation instance
+
+        self.protected_range = gui.get_slider("protected_range").get_current_value()
+        self.visual_range = gui.get_slider("visual_range").get_current_value()
+        self.seperation_factor = gui.get_slider("seperation").get_current_value()
+        self.alignment_factor = gui.get_slider("alignment").get_current_value()
+        self.cohesion_factor = gui.get_slider("cohesion").get_current_value()
+
+        gui.get_slider_label("protected_range").set_text(f"Protected Range: {self.protected_range}")
+        gui.get_slider_label("visual_range").set_text(f"Visual Range: {self.visual_range}")
+        gui.get_slider_label("seperation").set_text(f"Seperation: {self.seperation_factor:.2f}")
+        gui.get_slider_label("alignment").set_text(f"Alignment: {self.alignment_factor:.2f}")
+        gui.get_slider_label("cohesion").set_text(f"Cohesion: {self.cohesion_factor:.2f}")
 
     def run(self, gui):
-        self.running = True
-        while self.running:
+        self.__running = True
+        while self.__running:
             # Tick clock to limit FPS
-            time_delta = self.clock.tick(FPS)/1000.0
+            time_delta = self.__clock.tick(FPS)/1000.0
 
             # Check for any pygame events
             self.events(gui)
@@ -94,68 +147,67 @@ class Sim():
             # Advance one step of simulation
             self.step()
 
+            self.update_gui_values(gui)
+
             # Render boids and GUI
             self.render()
-            gui.render_gui(self.screen)
+            gui.render_gui(self.__screen)
 
             # Swap buffers
             pyg.display.flip()
 
-            
-# TODO: ABSTRACT CLASS?
-class BoidObject():
+# Abstract class so it cannot be instantiated
+class BoidObject(abc.ABC):
     def __init__(self, sim, pos):
-        self.sim = sim
-        self.acc = sim.vec(0, 0)
-        self.vel = sim.vec(0, 0)
-        self.pos = sim.vec(pos)
-        self.speed = 1
+        self._sim = sim
+        self._acc = pyg.math.Vector2(0, 0)
+        self._vel = pyg.math.Vector2(0, 0)
+        self._pos = pyg.math.Vector2(pos)
+        self._max_speed = 1
 
+    @abc.abstractmethod
     def step(self):
-        self.vel += self.acc
-        self.pos += self.vel
+        self._vel += self._acc
+        self._pos += self._vel
 
-        self.acc = self.sim.vec(0, 0)
+        self._acc = pyg.math.Vector2(0, 0)
 
         # Boids wrap around window
-        if self.pos.x > self.sim.window.w:
-            self.pos.x -= self.sim.window.w
-        elif self.pos.x < 0:
-            self.pos.x += self.sim.window.w
+        window = self._sim.get_window()
+        if self._pos.x > window.w:
+            self._pos.x -= window.w
+        elif self._pos.x < 0:
+            self._pos.x += window.w
 
-        if self.pos.y > self.sim.window.h:
-            self.pos.y -= self.sim.window.h
-        elif self.pos.y < 0:
-            self.pos.y += self.sim.window.h
+        if self._pos.y > window.h:
+            self._pos.y -= window.h
+        elif self._pos.y < 0:
+            self._pos.y += window.h
         
 
 class Boid(BoidObject):
     def __init__(self, sim):
         pos = (random.randint(int(SCREEN_WIDTH / GENERATION_MARGIN), int((SCREEN_WIDTH / GENERATION_MARGIN) * (GENERATION_MARGIN - 1))), random.randint(int(SCREEN_HEIGHT / GENERATION_MARGIN), int((SCREEN_HEIGHT / GENERATION_MARGIN) * (GENERATION_MARGIN - 1))))
         super().__init__(sim, pos)
-        self.speed = MAX_SPEED
-        self.vel = sim.vec(1, 1)
-
-        self.visual_range = DEFAULT_VISUAL_RANGE
-        self.protected_range = DEFAULT_PROTECTED_RANGE
+        self._max_speed = MAX_SPEED
+        self._vel = pyg.math.Vector2(1, 1)
 
     def draw(self, screen):
         # Calculate points of the triangle
-        phi = math.atan2(self.vel.y, self.vel.x)
+        phi = math.atan2(self._vel.y, self._vel.x)
         phi2 = 0.75 * math.pi
 
-        pos1 = ((self.pos.x + (math.cos(phi) * BOID_SIZE), (self.pos.y + (math.sin(phi) * BOID_SIZE))))
-        pos2 = ((self.pos.x + (math.cos(phi + phi2) * BOID_SIZE), (self.pos.y + (math.sin(phi + phi2) * BOID_SIZE))))
-        pos3 = ((self.pos.x + (math.cos(phi - phi2) * BOID_SIZE), (self.pos.y + (math.sin(phi - phi2) * BOID_SIZE))))
+        pos1 = ((self._pos.x + (math.cos(phi) * BOID_SIZE), (self._pos.y + (math.sin(phi) * BOID_SIZE))))
+        pos2 = ((self._pos.x + (math.cos(phi + phi2) * BOID_SIZE), (self._pos.y + (math.sin(phi + phi2) * BOID_SIZE))))
+        pos3 = ((self._pos.x + (math.cos(phi - phi2) * BOID_SIZE), (self._pos.y + (math.sin(phi - phi2) * BOID_SIZE))))
 
         pyg.draw.polygon(screen, BOID_COLOUR, (pos1, pos2, pos3))
 
 
     def step(self):
-        self.acc += self.seperation() * SEPERATION_FACTOR
-        self.acc += self.alignment() * ALIGNMENT_FACTOR
-        self.acc += self.cohesion() * COHESION_FACTOR
-
+        self._acc += self.seperation() * self._sim.seperation_factor
+        self._acc += self.alignment() * self._sim.alignment_factor
+        self._acc += self.cohesion() * self._sim.cohesion_factor
         super().step()
 
         # Increment positions by velocity
@@ -164,36 +216,36 @@ class Boid(BoidObject):
 
     def move(self):
         # Ensure velocity doesn't exceed max velocity
-        if self.vel.length() > MAX_SPEED:
-            self.vel.scale_to_length(MAX_SPEED)
+        if self._vel.length() > MAX_SPEED:
+            self._vel.scale_to_length(MAX_SPEED)
 
-        self.pos += self.vel
+        self._pos += self._vel
 
     def seperation(self):
-        acc_request = self.sim.vec(0, 0)
-        neighbouring_boids = self.boids_in_radius(self.protected_range)
+        acc_request = pyg.math.Vector2(0, 0)
+        neighbouring_boids = self.boids_in_radius(self._sim.protected_range)
 
         if len(neighbouring_boids) == 0:
             return acc_request
 
         for neighbour in neighbouring_boids:
             try:
-                dist_delta = self.pos - neighbour.pos
-                acc_request += (dist_delta) * (self.protected_range / self.pos.distance_to(neighbour.pos))
+                dist_delta = self._pos - neighbour._pos
+                acc_request += (dist_delta) * (self._sim.protected_range / self._pos.distance_to(neighbour._pos))
             except ZeroDivisionError:
                 continue
 
         return self.limit_force(acc_request, neighbouring_boids)
 
     def alignment(self):
-        force = self.sim.vec(0, 0)
-        neighbouring_boids = self.boids_in_radius(self.visual_range)
+        force = pyg.math.Vector2(0, 0)
+        neighbouring_boids = self.boids_in_radius(self._sim.visual_range)
 
         if len(neighbouring_boids) == 0:
             return force
         
         for neighbour in neighbouring_boids:
-            force += neighbour.vel
+            force += neighbour._vel
 
         if force.length() == 0:
             return force
@@ -201,14 +253,14 @@ class Boid(BoidObject):
         return self.limit_force(force, neighbouring_boids)
 
     def cohesion(self):
-        force = self.sim.vec(0, 0)
-        neighbouring_boids = self.boids_in_radius(self.visual_range)
+        force = pyg.math.Vector2(0, 0)
+        neighbouring_boids = self.boids_in_radius(self._sim.visual_range)
 
         if len(neighbouring_boids) == 0:
             return force
         
         for neighbour in neighbouring_boids:
-            force += (neighbour.pos - self.pos)
+            force += (neighbour._pos - self._pos)
 
         if force.length() == 0:
             return force
@@ -217,23 +269,25 @@ class Boid(BoidObject):
 
     def boids_in_radius(self, radius):
         boids_present = []
-        for surrounding_boid in self.sim.boid_container:
+        for surrounding_boid in self._sim.boid_container:
             if surrounding_boid == self:
                 pass
             else:
 
-                if self.pos.distance_to(surrounding_boid.pos) < radius:
+                if self._pos.distance_to(surrounding_boid._pos) < radius:
                     boids_present.append(surrounding_boid)
             
         return boids_present
 
     def limit_force(self, force, boids_in_radius):
         force /= len(boids_in_radius)
-        if force.length() <= 0:
+        if round(force.length(), 3) <= 0:
             return force
         
+        print(force.length())
+
         force.scale_to_length(1)
-        force = force * self.speed - self.vel
+        force = force * self._max_speed - self._vel
 
         if force.length() > MAX_ACC_REQUEST:
             force.scale_to_length(MAX_ACC_REQUEST)
@@ -243,5 +297,5 @@ class Boid(BoidObject):
         
 if __name__ == '__main__':
     sim = Sim()
-    gui = GUI()
+    gui = GUI(sim)
     sim.run(gui)
