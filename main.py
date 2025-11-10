@@ -1,6 +1,5 @@
 import pygame as pyg
 import pygame_gui as pygui
-from time import sleep
 import random
 import math
 import abc
@@ -20,12 +19,14 @@ class Config():
     GENERATION_MARGIN = 12 # The larger the number, the smaller the margin
     BOID_SIZE = 10
     PREDATOR_SIZE = 10
+    BOUNDARY_THICKNESS = 2
     BOID_COLOUR = (255, 255, 255)
     PREDATOR_COLOUR = (255, 0, 0)
     DEFAULT_VISUAL_RANGE = 100
     DEFAULT_PROTECTED_RANGE = 20
     DEFAULT_PREDATOR_RANGE = 100
-    DEFAULT_SEPERATION_FACTOR = 2
+    DEFAULT_BOUNDARY_RANGE = 10
+    DEFAULT_SEPARATION_FACTOR = 2
     DEFAULT_ALIGNMENT_FACTOR = 1
     DEFAULT_COHESION_FACTOR = 1
     DEFAULT_AVOIDANCE_FACTOR = 5
@@ -45,13 +46,13 @@ class GUI():
 
         self.__sliders = {"protected_range": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 0), self.__slider_size), start_value=Config.DEFAULT_PROTECTED_RANGE, value_range=(10, 100), manager=self.__manager), 
                           "visual_range": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 1), self.__slider_size), start_value=Config.DEFAULT_VISUAL_RANGE, value_range=(50, 300), manager=self.__manager),
-                          "seperation": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 2), self.__slider_size), start_value=Config.DEFAULT_SEPERATION_FACTOR, value_range=(0.1, 3), manager=self.__manager),
+                          "separation": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 2), self.__slider_size), start_value=Config.DEFAULT_SEPARATION_FACTOR, value_range=(0.1, 3), manager=self.__manager),
                           "alignment": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 3), self.__slider_size), start_value=Config.DEFAULT_ALIGNMENT_FACTOR, value_range=(0.1, 3), manager=self.__manager),
                           "cohesion": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 4), self.__slider_size), start_value=Config.DEFAULT_COHESION_FACTOR, value_range=(0.1, 3), manager=self.__manager)}
 
         self.__slider_labels = {"protected_range": pygui.elements.UILabel(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 0, "label"), self.__slider_size), text=f"Protected Range: {Config.DEFAULT_PROTECTED_RANGE}"),
                                  "visual_range": pygui.elements.UILabel(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 1, "label"), self.__slider_size), text=f"Visual Range: {Config.DEFAULT_VISUAL_RANGE}"),
-                                 "seperation": pygui.elements.UILabel(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 2, "label"), self.__slider_size), text=f"Seperation: {Config.DEFAULT_SEPERATION_FACTOR:.2f}"),
+                                 "separation": pygui.elements.UILabel(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 2, "label"), self.__slider_size), text=f"Seperation: {Config.DEFAULT_SEPARATION_FACTOR:.2f}"),
                                  "alignment": pygui.elements.UILabel(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 3, "label"), self.__slider_size), text=f"Alignment: {Config.DEFAULT_ALIGNMENT_FACTOR:.2f}"),
                                  "cohesion": pygui.elements.UILabel(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 4, "label"), self.__slider_size), text=f"Cohesion: {Config.DEFAULT_COHESION_FACTOR:.2f}")}
 
@@ -96,11 +97,13 @@ class Sim():
         self.__window = self.__screen.get_rect()
         self.__clock = pyg.time.Clock()
         self.__gui = GUI(self)
+        self.__boundary_manager = BoundaryManager(self)
 
         self.__config_values = {"visual_range": Config.DEFAULT_VISUAL_RANGE, 
                                "protected_range": Config.DEFAULT_PROTECTED_RANGE,
                                "predator_range": Config.DEFAULT_PREDATOR_RANGE,
-                               "seperation": Config.DEFAULT_SEPERATION_FACTOR,
+                               "boundary_range": Config.DEFAULT_BOUNDARY_RANGE,
+                               "separation": Config.DEFAULT_SEPARATION_FACTOR,
                                "alignment": Config.DEFAULT_ALIGNMENT_FACTOR,
                                "cohesion": Config.DEFAULT_COHESION_FACTOR,
                                "avoidance": Config.DEFAULT_AVOIDANCE_FACTOR}
@@ -116,6 +119,8 @@ class Sim():
         # Create predator container
         self.__predator_container = []
 
+        self.__boundary_container = []
+
     def get_config_value(self, type):
         return self.__config_values[type]
 
@@ -127,6 +132,10 @@ class Sim():
     
     def get_predator_container(self):
         return self.__predator_container
+    
+    def get_boundary_container(self):
+        return self.__boundary_container
+
 
     # Event handler
     def handle_events(self, gui):
@@ -140,6 +149,25 @@ class Sim():
                     if self.mouse_in_boundary():
                         self.__predator_container.append(Predator(self, pyg.mouse.get_pos()))
 
+                # Check for keypresses
+                if event.type == pyg.KEYDOWN:
+                    if event.key == pyg.K_1:
+                        if self.mouse_in_boundary():
+                            self.__boundary_manager.set_start_pos(pyg.mouse.get_pos())
+                        else:
+                            print("Mouse out of bounds")
+                    elif event.key == pyg.K_2:
+                        start_pos = self.__boundary_manager.get_start_pos()
+                        if start_pos is not None:
+                                if self.mouse_in_boundary():
+                                    end_pos = pyg.mouse.get_pos()
+                                    self.__boundary_container.append(Boundary((start_pos, end_pos)))
+                                    self.__boundary_manager.clear_start_pos()
+                                else:
+                                    print("Mouse out of bounds")
+                        else:
+                            print("Must set start position first!")
+                            
                 gui.process_gui_event(event)
 
     # Check mouse position does not exceed screen boundaries and does not fall in forbidden GUI zone
@@ -169,6 +197,9 @@ class Sim():
         for predator in self.__predator_container:
             predator.draw(self.__screen)
 
+        for boundary in self.__boundary_container:
+            boundary.draw(self.__screen)
+
     def create_grids(self):
         self.standard_grid_dimensions = (Config.SCREEN_WIDTH // Config.NUMBER_OF_GRIDS_WIDE, Config.SCREEN_HEIGHT // Config.NUMBER_OF_GRIDS_HIGH)
         #print(self.standard_grid_dimensions)
@@ -184,13 +215,13 @@ class Sim():
 
         self.__config_values["protected_range"] = gui.get_slider("protected_range").get_current_value()
         self.__config_values["visual_range"] = gui.get_slider("visual_range").get_current_value()
-        self.__config_values["seperation"] = gui.get_slider("seperation").get_current_value()
+        self.__config_values["separation"] = gui.get_slider("separation").get_current_value()
         self.__config_values["alignment"] = gui.get_slider("alignment").get_current_value()
         self.__config_values["cohesion"] = gui.get_slider("cohesion").get_current_value()
 
         gui.get_slider_label("protected_range").set_text(f"Protected Range: {self.__config_values['protected_range']}")
         gui.get_slider_label("visual_range").set_text(f"Visual Range: {self.__config_values['visual_range']}")
-        gui.get_slider_label("seperation").set_text(f"Seperation: {self.__config_values['seperation']:.2f}")
+        gui.get_slider_label("separation").set_text(f"Seperation: {self.__config_values['separation']:.2f}")
         gui.get_slider_label("alignment").set_text(f"Alignment: {self.__config_values['alignment']:.2f}")
         gui.get_slider_label("cohesion").set_text(f"Cohesion: {self.__config_values['cohesion']:.2f}")
 
@@ -276,8 +307,9 @@ class Boid(BoidObject):
 
 
     def step(self):
+        self._acc += self.__avoid_boundary() * self._sim.get_config_value("avoidance")
         self._acc += self.__avoid_predator() * self._sim.get_config_value("avoidance")
-        self._acc += self.__seperation() * self._sim.get_config_value("seperation")
+        self._acc += self.__separation() * self._sim.get_config_value("separation")
         self._acc += self.__alignment() * self._sim.get_config_value("alignment")
         self._acc += self.__cohesion() * self._sim.get_config_value("cohesion")
         super().step()
@@ -307,8 +339,24 @@ class Boid(BoidObject):
                 return acc_request
             
         return self.__limit_force(acc_request, nearby_predators)
+    
+    def __avoid_boundary(self):
+        acc_request = pyg.math.Vector2(0, 0)
+        nearby_boundaries = self.__boundaries_in_radius(self._sim.get_config_value("predator_range"))
 
-    def __seperation(self):
+        if len(nearby_boundaries) == 0:
+            return acc_request
+        
+        for boundary in nearby_boundaries:
+            try:
+                dist_delta = self.get_pos() - boundary.get_pos()
+                acc_request += (dist_delta) * (self._sim.get_config_value("boundary_range") / self.get_pos().distance_to(boundary.get_pos()))
+            except ZeroDivisionError:
+                return acc_request
+            
+        return self.__limit_force(acc_request, nearby_boundaries)
+
+    def __separation(self):
         acc_request = pyg.math.Vector2(0, 0)
         neighbouring_boids = self.__boids_in_radius(self._sim.get_config_value("protected_range"))
 
@@ -373,6 +421,15 @@ class Boid(BoidObject):
                     predators_present.append(potential_predator)
             
         return predators_present
+    
+    def __boundaries_in_radius(self, radius):
+        boundaries_present = []
+        for potential_boundary in self._sim.get_boundary_container():
+         # if self.get_pos().distance_to(potential_boundary.get_pos()) < radius:
+            if radius + 1 < radius:
+                    boundaries_present.append(potential_boundary)
+            
+        return boundaries_present
 
     def __limit_force(self, force, boids_in_radius):
         force /= len(boids_in_radius)
@@ -399,6 +456,27 @@ class Predator(BoidObject):
 
     def get_pos(self):
         return self._pos
+
+class BoundaryManager():
+    def __init__(self, sim):
+        self.__current_start_pos = None
+        self.__sim = sim
+
+    def set_start_pos(self, pos):
+        self.__current_start_pos = pos
+
+    def get_start_pos(self):
+        return self.__current_start_pos
+    
+    def clear_start_pos(self):
+        self.__current_start_pos = None
+
+class Boundary():
+    def __init__(self, pos):
+        self.__pos = pos
+
+    def draw(self, screen):
+        pyg.draw.line(screen, Config.PREDATOR_COLOUR, self.__pos[0], self.__pos[1], Config.BOUNDARY_THICKNESS)
 
 if __name__ == '__main__':
     sim = Sim()
