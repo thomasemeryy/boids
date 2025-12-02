@@ -15,16 +15,19 @@ class Config():
     DISPLAY_GRIDS = True
 
     # Boid constants
-    NUMBER_OF_BOIDS = 200
+    NUMBER_OF_BOIDS = 50
     GENERATION_MARGIN = 12 # The larger the number, the smaller the margin
     BOID_SIZE = 10
     PREDATOR_SIZE = 10
-    BOUNDARY_THICKNESS = 2
+    ASSEMBLY_SIZE = 25
+    BOUNDARY_THICKNESS = 3
+    BOUNDARY_RADIUS = 20
     BOID_COLOUR = (255, 255, 255)
     PREDATOR_COLOUR = (255, 0, 0)
+    ASSEMBLY_COLOUR = (255, 255, 0)
     DEFAULT_VISUAL_RANGE = 100
     DEFAULT_PROTECTED_RANGE = 20
-    DEFAULT_PREDATOR_RANGE = 100
+    DEFAULT_PREDATOR_RANGE = 30
     DEFAULT_BOUNDARY_RANGE = 10
     DEFAULT_SEPARATION_FACTOR = 2
     DEFAULT_ALIGNMENT_FACTOR = 1
@@ -98,6 +101,7 @@ class Sim():
         self.__clock = pyg.time.Clock()
         self.__gui = GUI(self)
         self.__boundary_manager = BoundaryManager(self)
+        self.__assembly_point = None
 
         self.__config_values = {"visual_range": Config.DEFAULT_VISUAL_RANGE, 
                                "protected_range": Config.DEFAULT_PROTECTED_RANGE,
@@ -119,6 +123,7 @@ class Sim():
         # Create predator container
         self.__predator_container = []
 
+        # Create boundary containers
         self.__boundary_container = []
 
     def get_config_value(self, type):
@@ -135,7 +140,9 @@ class Sim():
     
     def get_boundary_container(self):
         return self.__boundary_container
-
+    
+    def get_assembly_point(self):
+        return self.__assembly_point
 
     # Event handler
     def handle_events(self, gui):
@@ -149,24 +156,34 @@ class Sim():
                     if self.mouse_in_boundary():
                         self.__predator_container.append(Predator(self, pyg.mouse.get_pos()))
 
-                # Check for keypresses
+                # Check for keypresses to place objects
                 if event.type == pyg.KEYDOWN:
                     if event.key == pyg.K_1:
                         if self.mouse_in_boundary():
                             self.__boundary_manager.set_start_pos(pyg.mouse.get_pos())
                         else:
                             print("Mouse out of bounds")
+
                     elif event.key == pyg.K_2:
                         start_pos = self.__boundary_manager.get_start_pos()
                         if start_pos is not None:
                                 if self.mouse_in_boundary():
                                     end_pos = pyg.mouse.get_pos()
-                                    self.__boundary_container.append(Boundary((start_pos, end_pos)))
-                                    self.__boundary_manager.clear_start_pos()
+                                    if (start_pos[0] - end_pos[0])**2 + (start_pos[1] - end_pos[1])**2 > 0.01:
+                                        new_boundary = Boundary((pyg.math.Vector2(start_pos), pyg.math.Vector2(end_pos)))
+                                        self.__boundary_container.append(new_boundary)
+                                        new_boundary.expand(Config.BOUNDARY_RADIUS)
+                                        print(f"Start: {start_pos} // End: {end_pos}")
+                                        self.__boundary_manager.clear_start_pos()
+                                    else:
+                                        print("Cannot have length zero")
+
                                 else:
                                     print("Mouse out of bounds")
                         else:
                             print("Must set start position first!")
+                    elif event.key == pyg.K_3:
+                        self.__assembly_point = AssemblyPoint(pyg.mouse.get_pos())
                             
                 gui.process_gui_event(event)
 
@@ -191,6 +208,8 @@ class Sim():
         self.__screen.fill(Config.SCREEN_COLOUR)
         self.create_grids()
 
+        # Render all objects
+
         for boid in self.__boid_container:
             boid.draw(self.__screen)
 
@@ -199,15 +218,18 @@ class Sim():
 
         for boundary in self.__boundary_container:
             boundary.draw(self.__screen)
+            boundary.draw_extended(self.__screen)
+            
+        if self.__assembly_point is not None:
+            self.__assembly_point.draw(self.__screen)
 
     def create_grids(self):
         self.standard_grid_dimensions = (Config.SCREEN_WIDTH // Config.NUMBER_OF_GRIDS_WIDE, Config.SCREEN_HEIGHT // Config.NUMBER_OF_GRIDS_HIGH)
-        #print(self.standard_grid_dimensions)
+
         self.vertical_edge_grid_dimensions = (Config.SCREEN_WIDTH % (self.standard_grid_dimensions[0]), self.standard_grid_dimensions[1])
         self.horizontal_edge_grid_dimensions = (self.standard_grid_dimensions[0], Config.SCREEN_HEIGHT % (self.standard_grid_dimensions[1]))
         self.corner_grid_dimensions = ()
-        #print(self.vertical_edge_grid_dimensions)
-        #print(self.horizontal_edge_grid_dimensions)
+
 
 
     def update_gui_values(self, gui):
@@ -230,6 +252,7 @@ class Sim():
         while self.__running:
             # Tick clock to limit FPS
             time_delta = self.__clock.tick(Config.FPS) / 1000.0
+            # print(self.__clock.get_fps())
 
             # Check for any pygame events
             self.handle_events(self.__gui)
@@ -319,7 +342,7 @@ class Boid(BoidObject):
         
     def __move(self):
         # Ensure velocity doesn't exceed max velocity
-        if self._vel.length() > Config.MAX_SPEED:
+        if self._vel.length_squared() > (Config.MAX_SPEED ** 2):
             self._vel.scale_to_length(Config.MAX_SPEED)
 
         self.set_pos(self.get_pos() + self._vel)
@@ -342,17 +365,23 @@ class Boid(BoidObject):
     
     def __avoid_boundary(self):
         acc_request = pyg.math.Vector2(0, 0)
-        nearby_boundaries = self.__boundaries_in_radius(self._sim.get_config_value("predator_range"))
+        nearby_boundaries = self.__boundaries_in_radius()
 
         if len(nearby_boundaries) == 0:
             return acc_request
-        
+
         for boundary in nearby_boundaries:
+            closest_point = self.__distance_to_closest_boundary_point(boundary)
+
             try:
-                dist_delta = self.get_pos() - boundary.get_pos()
-                acc_request += (dist_delta) * (self._sim.get_config_value("boundary_range") / self.get_pos().distance_to(boundary.get_pos()))
+                dist_delta = self.get_pos() - closest_point
+                distance = self.get_pos().distance_to(closest_point)
+
+                print(f"Delta: {dist_delta} // Distance: {distance}")
+                acc_request += dist_delta * (self._sim.get_config_value("boundary_range") / distance)
+
             except ZeroDivisionError:
-                return acc_request
+                acc_request += boundary.get_perpendicular_vector() * self._sim.get_config_value("boundary_range")
             
         return self.__limit_force(acc_request, nearby_boundaries)
 
@@ -382,7 +411,7 @@ class Boid(BoidObject):
         for neighbour in neighbouring_boids:
             acc_request += neighbour._vel
 
-        if acc_request.length() == 0:
+        if acc_request.length_squared() == 0:
             return acc_request
         
         return self.__limit_force(acc_request, neighbouring_boids)
@@ -397,7 +426,7 @@ class Boid(BoidObject):
         for neighbour in neighbouring_boids:
             acc_request += (neighbour.get_pos() - self.get_pos())
 
-        if acc_request.length() == 0:
+        if acc_request.length_squared() == 0:
             return acc_request
         
         return self.__limit_force(acc_request, neighbouring_boids)
@@ -422,14 +451,27 @@ class Boid(BoidObject):
             
         return predators_present
     
-    def __boundaries_in_radius(self, radius):
+    def __boundaries_in_radius(self):
         boundaries_present = []
-        for potential_boundary in self._sim.get_boundary_container():
-         # if self.get_pos().distance_to(potential_boundary.get_pos()) < radius:
-            if radius + 1 < radius:
-                    boundaries_present.append(potential_boundary)
-            
+        for boundary in self._sim.get_boundary_container():
+            if boundary.check_collision(self):
+                boundaries_present.append(boundary)
+
         return boundaries_present
+    
+    def __distance_to_closest_boundary_point(self, boundary):
+        boundary_vector = boundary.get_boundary_vector()
+        point_vector = boundary.get_point_vector(self.get_pos())
+
+        boundary_length_squared = boundary_vector.length_squared()
+
+        if boundary_length_squared < 0.01:
+            return boundary.get_pos()[0]
+        
+        t = point_vector.dot(boundary_vector) / boundary_length_squared
+        t = max(0, min(1, t)) # Ensure t remains between 0 and 1
+
+        return boundary.get_pos()[0] + (boundary_vector * t)
 
     def __limit_force(self, force, boids_in_radius):
         force /= len(boids_in_radius)
@@ -439,7 +481,7 @@ class Boid(BoidObject):
         force.scale_to_length(1)
         force = force * self._max_speed - self._vel
 
-        if force.length() > Config.MAX_ACC_REQUEST:
+        if force.length_squared() > (Config.MAX_ACC_REQUEST ** 2):
             force.scale_to_length(Config.MAX_ACC_REQUEST)
         
         return force
@@ -474,9 +516,83 @@ class BoundaryManager():
 class Boundary():
     def __init__(self, pos):
         self.__pos = pos
+        self.__expanded_points = []
+        
+    def draw(self, screen):
+        self.__rect = pyg.draw.line(screen, Config.PREDATOR_COLOUR, self.__pos[0], self.__pos[1], Config.BOUNDARY_THICKNESS)
+
+    def draw_extended(self, screen):
+        pyg.draw.polygon(screen, Config.BOID_COLOUR, self.__expanded_points, 1)
+
+        expanded_rect = pyg.Rect(1, 1, 1, 1)
+        expanded_rect.topleft = self.__expanded_points[0]
+        expanded_rect.topright = self.__expanded_points[1]
+        expanded_rect.bottomright = self.__expanded_points[2]
+        expanded_rect.bottomleft = self.__expanded_points[3]
+
+        # pyg.draw.rect(screen, Config.BOID_COLOUR, expanded_rect, 1)
+
+    def expand(self, radius):
+        start_vector = self.__pos[0]
+        end_vector = self.__pos[1]
+        direction_vector = (end_vector - start_vector).normalize()
+
+        perpendicular_vector = pyg.math.Vector2.rotate(direction_vector, 90)
+
+        offset = perpendicular_vector * radius
+        top_left = start_vector + pyg.math.Vector2.rotate(offset, 45)
+        top_right = end_vector + pyg.math.Vector2.rotate(offset, -45)
+        bottom_left = start_vector - pyg.math.Vector2.rotate(offset, -45)
+        bottom_right = end_vector - pyg.math.Vector2.rotate(offset, 45)
+
+        self.__expanded_points = [top_left, top_right, bottom_right, bottom_left]
+
+    def get_expanded_points(self):
+        return self.__expanded_points
+
+    def get_pos(self):
+        return self.__pos
+    
+    def get_boundary_vector(self):
+        return self.__pos[1] - self.__pos[0]
+    
+    def get_point_vector(self, point):
+        return point - self.__pos[0]
+    
+    def get_perpendicular_vector(self):
+        return pyg.math.Vector2.rotate(self.get_boundary_vector().normalize(), 90)
+    
+    def check_collision(self, boid):
+        point = boid.get_pos()
+
+        # Confirm boundary has been expanded
+        if len(self.__expanded_points) != 4:
+            return False
+        
+        for i in range(4):
+            vertex_a = self.__expanded_points[i]
+            vertex_b = self.__expanded_points[(i + 1) % 4]
+
+            boundary_edge_vector = vertex_b - vertex_a
+            point_vector = point - vertex_a
+
+            cross_product = (boundary_edge_vector.x * point_vector.y) - (boundary_edge_vector.y * point_vector.x)
+            
+            if cross_product > 0:
+                print("Outside")
+                return False
+
+        print("Inside")
+
+        return True
+            
+
+class AssemblyPoint():
+    def __init__(self, pos):
+        self.__pos = pos
 
     def draw(self, screen):
-        pyg.draw.line(screen, Config.PREDATOR_COLOUR, self.__pos[0], self.__pos[1], Config.BOUNDARY_THICKNESS)
+        pyg.draw.circle(screen, Config.ASSEMBLY_COLOUR, self.__pos, Config.ASSEMBLY_SIZE)
 
 if __name__ == '__main__':
     sim = Sim()
