@@ -30,11 +30,12 @@ class Config():
     DEFAULT_PREDATOR_RANGE = 30
     DEFAULT_BOUNDARY_RANGE = 10
     DEFAULT_SEPARATION_FACTOR = 2
-    DEFAULT_SEEKING_FACTOR = 0.12
+    DEFAULT_SEEKING_FACTOR = 0.15
     DEFAULT_ALIGNMENT_FACTOR = 1
     DEFAULT_COHESION_FACTOR = 1
     DEFAULT_AVOIDANCE_FACTOR = 5
-    DEFAULT_ARRIVED_DISTANCE = BOUNDARY_RADIUS
+    ARRIVAL_SLOWING_RADIUS = 100
+    ARRIVED_RADIUS = 5
     MAX_SPEED = 3
     MAX_ACC_REQUEST = 0.1
 
@@ -334,10 +335,28 @@ class Boid(BoidObject):
 
 
     def step(self):
+        seeking_factor = 0
+        if self._sim.get_assembly_point() is not None:
+            # Check target position
+            target = self._sim.get_assembly_point().get_pos()
+            # Find distance from target
+            target_vector = target - self.get_pos()
+            distance_to_target = target_vector.length()
+        
+            # If great distance from target, reduce seeking 
+            # If near to target, increase seeking
+            if distance_to_target > 300:
+                seeking_factor = 0.1
+            elif distance_to_target > 100:
+                seeking_factor = 0.4
+            else:
+                seeking_factor = 1
+
+
         self._acc += self.__avoid_boundary() * self._sim.get_config_value("avoidance")
         self._acc += self.__avoid_predator() * self._sim.get_config_value("avoidance")
         self._acc += self.__separation() * self._sim.get_config_value("separation")
-        self._acc += self.__seeking() * self._sim.get_config_value("seeking")
+        self._acc += self.__seeking() * seeking_factor
         self._acc += self.__alignment() * self._sim.get_config_value("alignment")
         self._acc += self.__cohesion() * self._sim.get_config_value("cohesion")
         super().step()
@@ -444,20 +463,25 @@ class Boid(BoidObject):
             return acc_request
         
         assembly_vector = assembly_point.get_pos() - self.get_pos()
+        dist = assembly_vector.length()
 
-        dist_squared = assembly_vector.length_squared()
-        if dist_squared < (Config.DEFAULT_ARRIVED_DISTANCE) ** 2:
+        if dist < Config.ARRIVED_RADIUS:
             self._reached_target = True
             return acc_request
-        
+
+        if dist < Config.ARRIVAL_SLOWING_RADIUS:
+            speed = self._max_speed * (dist / Config.ARRIVAL_SLOWING_RADIUS)
+        else:
+            speed = self._max_speed
+
         # Normalise to create a direction vector
         if assembly_vector.length_squared() > 0:
             assembly_vector.normalize_ip()
         else:
-            return acc_request
+            return self.__limit_force(acc_request, [self])
         
         # Scale to maximum speed value
-        acc_request = assembly_vector * self._max_speed
+        acc_request = assembly_vector * speed
 
         # Subtract current velocity for steering force
         acc_request -= self._vel
