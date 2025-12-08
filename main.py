@@ -15,7 +15,7 @@ class Config():
     DISPLAY_GRIDS = True
 
     # Boid constants
-    NUMBER_OF_BOIDS = 50
+    NUMBER_OF_BOIDS = 150
     GENERATION_MARGIN = 12 # The larger the number, the smaller the margin
     BOID_SIZE = 10
     PREDATOR_SIZE = 10
@@ -30,9 +30,11 @@ class Config():
     DEFAULT_PREDATOR_RANGE = 30
     DEFAULT_BOUNDARY_RANGE = 10
     DEFAULT_SEPARATION_FACTOR = 2
+    DEFAULT_SEEKING_FACTOR = 0.12
     DEFAULT_ALIGNMENT_FACTOR = 1
     DEFAULT_COHESION_FACTOR = 1
     DEFAULT_AVOIDANCE_FACTOR = 5
+    DEFAULT_ARRIVED_DISTANCE = BOUNDARY_RADIUS
     MAX_SPEED = 3
     MAX_ACC_REQUEST = 0.1
 
@@ -108,6 +110,7 @@ class Sim():
                                "predator_range": Config.DEFAULT_PREDATOR_RANGE,
                                "boundary_range": Config.DEFAULT_BOUNDARY_RANGE,
                                "separation": Config.DEFAULT_SEPARATION_FACTOR,
+                               "seeking": Config.DEFAULT_SEEKING_FACTOR,
                                "alignment": Config.DEFAULT_ALIGNMENT_FACTOR,
                                "cohesion": Config.DEFAULT_COHESION_FACTOR,
                                "avoidance": Config.DEFAULT_AVOIDANCE_FACTOR}
@@ -308,6 +311,7 @@ class Boid(BoidObject):
         super().__init__(sim, pos)
         self._max_speed = Config.MAX_SPEED
         self._vel = pyg.math.Vector2(1, 1)
+        self._reached_target = False
 
     def get_pos(self):
         return self._pos
@@ -333,6 +337,7 @@ class Boid(BoidObject):
         self._acc += self.__avoid_boundary() * self._sim.get_config_value("avoidance")
         self._acc += self.__avoid_predator() * self._sim.get_config_value("avoidance")
         self._acc += self.__separation() * self._sim.get_config_value("separation")
+        self._acc += self.__seeking() * self._sim.get_config_value("seeking")
         self._acc += self.__alignment() * self._sim.get_config_value("alignment")
         self._acc += self.__cohesion() * self._sim.get_config_value("cohesion")
         super().step()
@@ -430,6 +435,34 @@ class Boid(BoidObject):
             return acc_request
         
         return self.__limit_force(acc_request, neighbouring_boids)
+    
+    def __seeking(self):
+        acc_request = pyg.math.Vector2(0, 0)
+        assembly_point = self._sim.get_assembly_point()
+
+        if assembly_point is None:
+            return acc_request
+        
+        assembly_vector = assembly_point.get_pos() - self.get_pos()
+
+        dist_squared = assembly_vector.length_squared()
+        if dist_squared < (Config.DEFAULT_ARRIVED_DISTANCE) ** 2:
+            self._reached_target = True
+            return acc_request
+        
+        # Normalise to create a direction vector
+        if assembly_vector.length_squared() > 0:
+            assembly_vector.normalize_ip()
+        else:
+            return acc_request
+        
+        # Scale to maximum speed value
+        acc_request = assembly_vector * self._max_speed
+
+        # Subtract current velocity for steering force
+        acc_request -= self._vel
+
+        return acc_request * Config.DEFAULT_SEEKING_FACTOR
 
     def __boids_in_radius(self, radius):
         boids_present = []
@@ -437,7 +470,6 @@ class Boid(BoidObject):
             if surrounding_boid == self:
                 pass
             else:
-
                 if self.get_pos().distance_to(surrounding_boid.get_pos()) < radius:
                     boids_present.append(surrounding_boid)
             
@@ -579,10 +611,7 @@ class Boundary():
             cross_product = (boundary_edge_vector.x * point_vector.y) - (boundary_edge_vector.y * point_vector.x)
             
             if cross_product > 0:
-                print("Outside")
                 return False
-
-        print("Inside")
 
         return True
             
@@ -590,6 +619,9 @@ class Boundary():
 class AssemblyPoint():
     def __init__(self, pos):
         self.__pos = pos
+
+    def get_pos(self):
+        return self.__pos
 
     def draw(self, screen):
         pyg.draw.circle(screen, Config.ASSEMBLY_COLOUR, self.__pos, Config.ASSEMBLY_SIZE)
