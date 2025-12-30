@@ -36,7 +36,7 @@ class Config():
     DEFAULT_AVOIDANCE_FACTOR = 5
     ARRIVAL_SLOWING_RADIUS = 100
     ARRIVED_RADIUS = 5
-    MAX_SPEED = 3
+    MAX_SPEED = 2
     MAX_ACC_REQUEST = 0.1
 
 class GUI():
@@ -320,6 +320,9 @@ class Boid(BoidObject):
     def set_pos(self, value):
         self._pos = value
 
+    def get_vel(self):
+        return self._vel
+
     def draw(self, screen):
         # Calculate points of the triangle
         phi = math.atan2(self._vel.y, self._vel.x)
@@ -395,19 +398,37 @@ class Boid(BoidObject):
             return acc_request
 
         for boundary in nearby_boundaries:
-            closest_point = self.__distance_to_closest_boundary_point(boundary)
+            will_collide, collision_point = boundary.will_collide(self)
 
-            try:
-                dist_delta = self.get_pos() - closest_point
-                distance = self.get_pos().distance_to(closest_point)
+            print(f"Will collide: {will_collide} // Collision point: {collision_point}")
 
-                print(f"Delta: {dist_delta} // Distance: {distance}")
-                acc_request += dist_delta * (self._sim.get_config_value("boundary_range") / distance)
+            # Check if a collision is due in the next frame
+            if will_collide:
+                reverse_vector = self.get_pos() - collision_point
 
-            except ZeroDivisionError:
-                acc_request += boundary.get_perpendicular_vector() * self._sim.get_config_value("boundary_range")
+                try:
+                    reverse_vector.normalize_ip()
+                    acc_request += reverse_vector * (self._sim.get_config_value("boundary_range") * 5)
+
+                except ZeroDivisionError:
+                    acc_request += boundary.get_perpendicular_vector() * self._sim.get_config_value("boundary_range")
+
+                return self.__limit_force(acc_request, nearby_boundaries)
             
-        return self.__limit_force(acc_request, nearby_boundaries)
+            else:
+                closest_point = self.__distance_to_closest_boundary_point(boundary)
+
+                try:
+                    dist_delta = self.get_pos() - closest_point
+                    distance = self.get_pos().distance_to(closest_point)
+
+                    print(f"Delta: {dist_delta} // Distance: {distance}")
+                    acc_request += dist_delta * (self._sim.get_config_value("boundary_range") / distance)
+
+                except ZeroDivisionError:
+                    acc_request += boundary.get_perpendicular_vector() * self._sim.get_config_value("boundary_range")
+            
+                return self.__limit_force(acc_request, nearby_boundaries)
 
     def __separation(self):
         acc_request = pyg.math.Vector2(0, 0)
@@ -638,7 +659,52 @@ class Boundary():
                 return False
 
         return True
-            
+    
+    def will_collide(self, boid):
+        current_pos = boid.get_pos()
+        next_pos = boid.get_pos() + boid.get_vel()
+
+        closest_point = None
+        min_distance = float('inf')
+
+        for i in range(4):
+            line_start = self.__expanded_points[i]
+            line_end = self.__expanded_points[(i + 1) % 4]
+
+            intersect = self.__lines_intersect(current_pos, next_pos, line_start, line_end)
+
+            if intersect is not None:
+                distance = boid.get_pos().distance_squared_to(intersect)
+                if distance < min_distance:
+                    min_distance = distance
+                    closest_point = intersect
+
+        # Check whether the boid path for the next frame intersects a line 
+        return (closest_point is not None, closest_point)
+    
+    def __lines_intersect(self, p1, p2, p3, p4):
+        # Check boundary has been expanded
+        if len(self.__expanded_points) != 4:
+            return (False, None)
+        
+        # P1/P2 = projected motion
+        # P3/P4 = boundary edge
+
+        x1, y1 = p1.x, p1.y
+        x2, y2 = p2.x, p2.y
+        x3, y3 = p3.x, p3.y
+        x4, y4 = p4.x, p4.y
+
+        den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+
+        if den == 0:
+            return
+ 
+        t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / den
+        u = ((x2 - x1) * (y1 - y3) - (y2 - y1) * (x1 - x3)) / den
+
+        if 0 < t < 1 and 0 < u < 1:
+            return pyg.Vector2(x1 + t * (x2 - x1), y1 + t * (y2 - y1))
 
 class AssemblyPoint():
     def __init__(self, pos):
