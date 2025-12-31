@@ -98,8 +98,8 @@ class GUI():
 class Sim():
     def __init__(self):
         pyg.init()
-        self.__menu_screen = False
-        self.__boids_running = True
+        self.__menu_screen = True
+        self.__boids_running = False
         self.__running = False
         self.__screen = pyg.display.set_mode((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
         self.__window = self.__screen.get_rect()
@@ -150,6 +150,10 @@ class Sim():
     
     def get_assembly_point(self):
         return self.__assembly_point
+    
+    def set_game_state(self, menu_screen, boids_running):
+        self.__menu_screen = menu_screen
+        self.__boids_running = boids_running
 
     # Event handler
     def handle_events(self, gui):
@@ -166,10 +170,9 @@ class Sim():
 
                 # Check for keypresses to place objects
                 if event.type == pyg.KEYDOWN:
+
                     if event.key == pyg.K_SPACE:
-                        self.__boids_running = not self.__boids_running
-                        self.__menu_screen = not self.__menu_screen
-                        print(f"Boids running: {self.__boids_running}")
+                        self.set_game_state(True, False)
 
                     if self.__boids_running:
                         if event.key == pyg.K_1:
@@ -298,19 +301,28 @@ class Sim():
 class MainMenu():
     def __init__(self, sim):
         self.__sim = sim
-        self.__buttons_list = []
+        self.__buttons_dict = {}
 
-    def __create_button(self, img_path):
+    def __create_button(self, x, y, img_path, scale):
         button_img = pyg.image.load(img_path).convert_alpha()
-        return Button(500, 400, button_img, 0.05)
+        return Button(x, y, button_img, scale)
 
     def menu_screen(self):
-        play_button = self.__create_button("images/play_button.png")
-        self.__buttons_list.append(play_button)
+        play_button = self.__create_button(400, 400, "images/play_button.png", 0.05)
+        pause_button = self.__create_button(600, 400, "images/play_button.png", 0.05)
+        self.__buttons_dict["play"] = play_button
+        self.__buttons_dict["pause"] = pause_button
         
     def render_menu(self, screen):
-        for button in self.__buttons_list:
-            button.draw(screen)
+        for name, button in self.__buttons_dict.items():
+            if button.draw(screen):
+                self.__button_action(name)
+
+    def __button_action(self, id):
+        if id == "play":
+            self.__sim.set_game_state(False, True)
+        else:
+            pass
 
 class Button():
     def __init__(self, x, y, image, scale):
@@ -321,7 +333,7 @@ class Button():
         self.__rect.topleft = (x, y)
         self.__clicked = False
 
-    def draw(self, surface): # TODO: Fix button clicking functionality
+    def draw(self, surface):
         action = False
         mouse_pos = pyg.mouse.get_pos()
 
@@ -329,7 +341,6 @@ class Button():
             if pyg.mouse.get_pressed()[0] == 1 and self.__clicked == False:
                 self.__clicked = True
                 action = True
-                print("Button clicked")
 
         if pyg.mouse.get_pressed()[0] == 0:
             self.__clicked = False
