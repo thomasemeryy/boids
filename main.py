@@ -98,11 +98,14 @@ class GUI():
 class Sim():
     def __init__(self):
         pyg.init()
+        self.__menu_screen = False
+        self.__boids_running = True
         self.__running = False
         self.__screen = pyg.display.set_mode((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
         self.__window = self.__screen.get_rect()
         self.__clock = pyg.time.Clock()
         self.__gui = GUI(self)
+        self.__menu = MainMenu(self)
         self.__boundary_manager = BoundaryManager(self)
         self.__assembly_point = None
 
@@ -155,39 +158,46 @@ class Sim():
                 if event.type == pyg.QUIT:
                     self.__running = False
 
-                # Check left mouse button pressed
-                if pyg.mouse.get_pressed()[0]:
-                    if self.mouse_in_boundary():
-                        self.__predator_container.append(Predator(self, pyg.mouse.get_pos()))
+                if self.__boids_running:
+                    # Check left mouse button pressed
+                    if pyg.mouse.get_pressed()[0]:
+                        if self.mouse_in_boundary():
+                            self.__predator_container.append(Predator(self, pyg.mouse.get_pos()))
 
                 # Check for keypresses to place objects
                 if event.type == pyg.KEYDOWN:
-                    if event.key == pyg.K_1:
-                        if self.mouse_in_boundary():
-                            self.__boundary_manager.set_start_pos(pyg.mouse.get_pos())
-                        else:
-                            print("Mouse out of bounds")
+                    if event.key == pyg.K_SPACE:
+                        self.__boids_running = not self.__boids_running
+                        self.__menu_screen = not self.__menu_screen
+                        print(f"Boids running: {self.__boids_running}")
 
-                    elif event.key == pyg.K_2:
-                        start_pos = self.__boundary_manager.get_start_pos()
-                        if start_pos is not None:
-                                if self.mouse_in_boundary():
-                                    end_pos = pyg.mouse.get_pos()
-                                    if (start_pos[0] - end_pos[0])**2 + (start_pos[1] - end_pos[1])**2 > 0.01:
-                                        new_boundary = Boundary((pyg.math.Vector2(start_pos), pyg.math.Vector2(end_pos)))
-                                        self.__boundary_container.append(new_boundary)
-                                        new_boundary.expand(Config.BOUNDARY_RADIUS)
-                                        print(f"Start: {start_pos} // End: {end_pos}")
-                                        self.__boundary_manager.clear_start_pos()
+                    if self.__boids_running:
+                        if event.key == pyg.K_1:
+                            if self.mouse_in_boundary():
+                                self.__boundary_manager.set_start_pos(pyg.mouse.get_pos())
+                            else:
+                                print("Mouse out of bounds")
+
+                        elif event.key == pyg.K_2:
+                            start_pos = self.__boundary_manager.get_start_pos()
+                            if start_pos is not None:
+                                    if self.mouse_in_boundary():
+                                        end_pos = pyg.mouse.get_pos()
+                                        if (start_pos[0] - end_pos[0])**2 + (start_pos[1] - end_pos[1])**2 > 0.01:
+                                            new_boundary = Boundary((pyg.math.Vector2(start_pos), pyg.math.Vector2(end_pos)))
+                                            self.__boundary_container.append(new_boundary)
+                                            new_boundary.expand(Config.BOUNDARY_RADIUS)
+                                            print(f"Start: {start_pos} // End: {end_pos}")
+                                            self.__boundary_manager.clear_start_pos()
+                                        else:
+                                            print("Cannot have length zero")
+
                                     else:
-                                        print("Cannot have length zero")
-
-                                else:
-                                    print("Mouse out of bounds")
-                        else:
-                            print("Must set start position first!")
-                    elif event.key == pyg.K_3:
-                        self.__assembly_point = AssemblyPoint(pyg.mouse.get_pos())
+                                        print("Mouse out of bounds")
+                            else:
+                                print("Must set start position first!")
+                        elif event.key == pyg.K_3:
+                            self.__assembly_point = AssemblyPoint(pyg.mouse.get_pos())
                             
                 gui.process_gui_event(event)
 
@@ -210,35 +220,40 @@ class Sim():
     def render(self):
         # Wipe last screen
         self.__screen.fill(Config.SCREEN_COLOUR)
-        self.create_grids()
+        
+        # Check state of game
+        if self.__menu_screen:
+            self.__menu.render_menu(self.__screen)
 
-        # Render all objects
+        elif self.__boids_running:
+            # Render all objects
+            self.create_grids()
 
-        for boid in self.__boid_container:
-            boid.draw(self.__screen)
+            for boid in self.__boid_container:
+                boid.draw(self.__screen)
 
-        for predator in self.__predator_container:
-            predator.draw(self.__screen)
+            for predator in self.__predator_container:
+                predator.draw(self.__screen)
 
-        for boundary in self.__boundary_container:
-            boundary.draw(self.__screen)
-            boundary.draw_extended(self.__screen)
-            
-        if self.__assembly_point is not None:
-            self.__assembly_point.draw(self.__screen)
+            for boundary in self.__boundary_container:
+                boundary.draw(self.__screen)
+                boundary.draw_extended(self.__screen)
+                
+            if self.__assembly_point is not None:
+                self.__assembly_point.draw(self.__screen)
 
-    def create_grids(self):
+        else:
+            pass
+
+    def create_grids(self): # TODO: Unfinished - use for spacial hashing
         self.standard_grid_dimensions = (Config.SCREEN_WIDTH // Config.NUMBER_OF_GRIDS_WIDE, Config.SCREEN_HEIGHT // Config.NUMBER_OF_GRIDS_HIGH)
 
         self.vertical_edge_grid_dimensions = (Config.SCREEN_WIDTH % (self.standard_grid_dimensions[0]), self.standard_grid_dimensions[1])
         self.horizontal_edge_grid_dimensions = (self.standard_grid_dimensions[0], Config.SCREEN_HEIGHT % (self.standard_grid_dimensions[1]))
         self.corner_grid_dimensions = ()
 
-
-
     def update_gui_values(self, gui):
         # Add values from sliders to simulation instance
-
         self.__config_values["protected_range"] = gui.get_slider("protected_range").get_current_value()
         self.__config_values["visual_range"] = gui.get_slider("visual_range").get_current_value()
         self.__config_values["separation"] = gui.get_slider("separation").get_current_value()
@@ -253,6 +268,7 @@ class Sim():
 
     def run(self):
         self.__running = True
+        self.__menu.menu_screen()
         while self.__running:
             # Tick clock to limit FPS
             time_delta = self.__clock.tick(Config.FPS) / 1000.0
@@ -265,8 +281,12 @@ class Sim():
             self.__gui.update_gui(time_delta)
 
             # Advance one step of simulation
-            self.step()
-            self.update_gui_values(self.__gui)
+            if self.__boids_running:
+                self.step()
+                self.update_gui_values(self.__gui)
+
+            if self.__menu_screen:
+                pass
 
             # Render boids and GUI
             self.render()
@@ -274,6 +294,48 @@ class Sim():
 
             # Swap buffers
             pyg.display.flip()
+
+class MainMenu():
+    def __init__(self, sim):
+        self.__sim = sim
+        self.__buttons_list = []
+
+    def __create_button(self, img_path):
+        button_img = pyg.image.load(img_path).convert_alpha()
+        return Button(500, 400, button_img, 0.05)
+
+    def menu_screen(self):
+        play_button = self.__create_button("images/play_button.png")
+        self.__buttons_list.append(play_button)
+        
+    def render_menu(self, screen):
+        for button in self.__buttons_list:
+            button.draw(screen)
+
+class Button():
+    def __init__(self, x, y, image, scale):
+        w = image.get_width()
+        h = image.get_height()
+        self.__image = pyg.transform.scale(image, (int(w * scale), int(h * scale)))
+        self.__rect = self.__image.get_rect()
+        self.__rect.topleft = (x, y)
+        self.__clicked = False
+
+    def draw(self, surface): # TODO: Fix button clicking functionality
+        action = False
+        mouse_pos = pyg.mouse.get_pos()
+
+        if self.__rect.collidepoint(mouse_pos):
+            if pyg.mouse.get_pressed()[0] == 1 and self.__clicked == False:
+                self.__clicked = True
+                action = True
+                print("Button clicked")
+
+        if pyg.mouse.get_pressed()[0] == 0:
+            self.__clicked = False
+
+        surface.blit(self.__image, (self.__rect.x, self.__rect.y))
+        return action
 
 # Abstract class so it cannot be instantiated
 class BoidObject(abc.ABC):
@@ -349,12 +411,11 @@ class Boid(BoidObject):
             # If great distance from target, reduce seeking 
             # If near to target, increase seeking
             if distance_to_target > 300:
-                seeking_factor = 0.1
+                seeking_factor = 0.2
             elif distance_to_target > 100:
                 seeking_factor = 0.4
             else:
-                seeking_factor = 1
-
+                seeking_factor = 0.8
 
         self._acc += self.__avoid_boundary() * self._sim.get_config_value("avoidance")
         self._acc += self.__avoid_predator() * self._sim.get_config_value("avoidance")
@@ -502,7 +563,7 @@ class Boid(BoidObject):
             return self.__limit_force(acc_request, [self])
         
         # Scale to maximum speed value
-        acc_request = assembly_vector * speed
+        acc_request = assembly_vector * (speed * 0.2)
 
         # Subtract current velocity for steering force
         acc_request -= self._vel
