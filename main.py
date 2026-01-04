@@ -334,7 +334,9 @@ class Sim():
             # Advance one step of simulation
             if self.__boids_running:
                 self.step()
-                self.update_gui_values(self.__gui)
+            
+            # Update GUI values
+            self.update_gui_values(self.__gui)
 
             if self.__menu_screen:
                 pass
