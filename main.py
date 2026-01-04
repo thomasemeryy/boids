@@ -3,6 +3,7 @@ import pygame_gui as pygui
 import random
 import math
 import abc
+from enum import Enum
 
 class Config():
     # Sim constants
@@ -49,6 +50,11 @@ class Config():
     MENU_CONTROLS_WIDTH = 400
     MENU_CONTROLS_MARGIN = 50
     MENU_RUN_Y = 560
+
+class GameState(Enum):
+    MENU = "menu"
+    MAP_BUILDER = "map_builder"
+    SIMULATION = "simulation"
 
 class GUI():
     def __init__(self, sim):
@@ -114,6 +120,9 @@ class GUI():
                 self.__sliders[slider_key].set_dimensions((self.__slider_size[0], self.__slider_size[1]))
                 self.__slider_labels[slider_key].set_relative_position((x, y + self.__slider_size[1] - 10))
                 self.__sliders[slider_key].set_relative_position((x, y))
+
+            elif state == "map_builder":
+                pass # TODO: Hide GUI elements
                 
 
     def get_slider(self, slider):
@@ -143,14 +152,13 @@ class GUI():
 class Sim():
     def __init__(self):
         pyg.init()
-        self.__menu_screen = True
-        self.__boids_running = False
+        self.__current_game_state = GameState.MENU
         self.__running = False
         self.__screen = pyg.display.set_mode((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
         self.__window = self.__screen.get_rect()
         self.__clock = pyg.time.Clock()
         self.__gui = GUI(self)
-        self.__menu = MainMenu(self)
+        self.__menu = Menu(self)
         self.__boundary_manager = BoundaryManager(self)
         self.__assembly_point = None
 
@@ -196,13 +204,21 @@ class Sim():
     def get_assembly_point(self):
         return self.__assembly_point
     
-    def set_game_state(self, menu_screen, boids_running):
-        self.__menu_screen = menu_screen
-        self.__boids_running = boids_running
-        if menu_screen:
+    def set_game_state(self, state):
+        if state == "menu":
+            self.__current_game_state = GameState.MENU
             self.__gui.set_gui_layout("menu")
-        else:
+        elif state == "map_builder":
+            self.__current_game_state = GameState.MAP_BUILDER
+            self.__gui.set_gui_layout("map_builder")
+            # Clear previous maps by calling reset function
+        elif state == "simulation":
+            # Get data from map builder - boundaries, assembly point and boids
+            self.__current_game_state = GameState.SIMULATION
             self.__gui.set_gui_layout("game")
+        else:
+            pass
+            
 
     # Event handler
     def handle_events(self, gui):
@@ -211,7 +227,7 @@ class Sim():
                 if event.type == pyg.QUIT:
                     self.__running = False
 
-                if self.__boids_running:
+                if self.__current_game_state == GameState.SIMULATION:
                     # Check left mouse button pressed
                     if pyg.mouse.get_pressed()[0]:
                         if self.mouse_in_boundary():
@@ -221,9 +237,9 @@ class Sim():
                 if event.type == pyg.KEYDOWN:
 
                     if event.key == pyg.K_SPACE:
-                        self.set_game_state(True, False)
+                        self.set_game_state("menu")
 
-                    if self.__boids_running:
+                    if self.__current_game_state == GameState.SIMULATION:
                         if event.key == pyg.K_1:
                             if self.mouse_in_boundary():
                                 self.__boundary_manager.set_start_pos(pyg.mouse.get_pos())
@@ -272,30 +288,22 @@ class Sim():
     def render(self):
         # Wipe last screen
         self.__screen.fill(Config.SCREEN_COLOUR)
-        
-        # Check state of game
-        if self.__menu_screen:
-            self.__menu.render_menu(self.__screen)
 
-        elif self.__boids_running:
-            # Render all objects
-            self.create_grids()
+        self.create_grids()
 
-            for boid in self.__boid_container:
-                boid.draw(self.__screen)
+        for boid in self.__boid_container:
+            boid.draw(self.__screen)
 
-            for predator in self.__predator_container:
-                predator.draw(self.__screen)
+        for predator in self.__predator_container:
+            predator.draw(self.__screen)
 
-            for boundary in self.__boundary_container:
-                boundary.draw(self.__screen)
-                boundary.draw_extended(self.__screen)
-                
-            if self.__assembly_point is not None:
-                self.__assembly_point.draw(self.__screen)
+        for boundary in self.__boundary_container:
+            boundary.draw(self.__screen)
+            boundary.draw_extended(self.__screen)
+            
+        if self.__assembly_point is not None:
+            self.__assembly_point.draw(self.__screen)
 
-        else:
-            pass
 
     def create_grids(self): # TODO: Unfinished - use for spacial hashing
         self.standard_grid_dimensions = (Config.SCREEN_WIDTH // Config.NUMBER_OF_GRIDS_WIDE, Config.SCREEN_HEIGHT // Config.NUMBER_OF_GRIDS_HIGH)
@@ -331,24 +339,23 @@ class Sim():
             # Update GUI
             self.__gui.update_gui(time_delta)
 
-            # Advance one step of simulation
-            if self.__boids_running:
+            # Advance one step of simulation and render
+            if self.__current_game_state == GameState.SIMULATION:
                 self.step()
+                self.render()
             
             # Update GUI values
             self.update_gui_values(self.__gui)
 
-            if self.__menu_screen:
-                pass
+            if self.__current_game_state == GameState.MENU:
+                self.__menu.render_menu(self.__screen)
 
-            # Render boids and GUI
-            self.render()
             self.__gui.render_gui(self.__screen)
-
+            
             # Swap buffers
             pyg.display.flip()
 
-class MainMenu():
+class Menu():
     def __init__(self, sim):
         self.__sim = sim
         self.__buttons_dict = {}
@@ -380,7 +387,7 @@ class MainMenu():
 
     def __button_action(self, button_id):
         if button_id == "run":
-            self.__sim.set_game_state(False, True)
+            self.__sim.set_game_state("simulation")
         elif button_id == "create_map":
             print("Create map button clicked")
         elif button_id == "load_map":
