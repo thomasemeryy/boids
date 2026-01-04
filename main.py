@@ -39,6 +39,17 @@ class Config():
     MAX_SPEED = 2
     MAX_ACC_REQUEST = 0.1
 
+    # Menu layout
+    MOUSE_BOUNDARY_MARGIN = 90
+    MENU_TITLE_X = 112
+    MENU_TITLE_Y = 80
+    MENU_HEADERS_Y = 275
+    MENU_CONTROLS_Y = 345
+    MENU_CONTROLS_HEIGHT = 300
+    MENU_CONTROLS_WIDTH = 400
+    MENU_CONTROLS_MARGIN = 50
+    MENU_RUN_Y = 560
+
 class GUI():
     def __init__(self, sim):
         self.__manager = pygui.UIManager((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
@@ -47,29 +58,63 @@ class GUI():
         self.__gui_sliders = 5
         self.__sim = sim
         self.__slider_moving = False
+        self.__window = self.__sim.get_window()
 
-        window = self.__sim.get_window()
+        self.__slider_keys = ["protected_range", "visual_range", "separation", "alignment", "cohesion"]
 
-        self.__sliders = {"protected_range": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 0), self.__slider_size), start_value=Config.DEFAULT_PROTECTED_RANGE, value_range=(10, 100), manager=self.__manager), 
-                          "visual_range": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 1), self.__slider_size), start_value=Config.DEFAULT_VISUAL_RANGE, value_range=(50, 300), manager=self.__manager),
-                          "separation": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 2), self.__slider_size), start_value=Config.DEFAULT_SEPARATION_FACTOR, value_range=(0.1, 3), manager=self.__manager),
-                          "alignment": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 3), self.__slider_size), start_value=Config.DEFAULT_ALIGNMENT_FACTOR, value_range=(0.1, 3), manager=self.__manager),
-                          "cohesion": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 4), self.__slider_size), start_value=Config.DEFAULT_COHESION_FACTOR, value_range=(0.1, 3), manager=self.__manager)}
+        self.__sliders = {"protected_range": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect((0,0), self.__slider_size), start_value=Config.DEFAULT_PROTECTED_RANGE, value_range=(10, 100), manager=self.__manager), 
+                          "visual_range": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect((0,0), self.__slider_size), start_value=Config.DEFAULT_VISUAL_RANGE, value_range=(50, 300), manager=self.__manager),
+                          "separation": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect((0,0), self.__slider_size), start_value=Config.DEFAULT_SEPARATION_FACTOR, value_range=(0.1, 3), manager=self.__manager),
+                          "alignment": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect((0,0), self.__slider_size), start_value=Config.DEFAULT_ALIGNMENT_FACTOR, value_range=(0.1, 3), manager=self.__manager),
+                          "cohesion": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect((0,0), self.__slider_size), start_value=Config.DEFAULT_COHESION_FACTOR, value_range=(0.1, 3), manager=self.__manager)}
 
-        self.__slider_labels = {"protected_range": pygui.elements.UILabel(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 0, "label"), self.__slider_size), text=f"Protected Range: {Config.DEFAULT_PROTECTED_RANGE}"),
-                                 "visual_range": pygui.elements.UILabel(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 1, "label"), self.__slider_size), text=f"Visual Range: {Config.DEFAULT_VISUAL_RANGE}"),
-                                 "separation": pygui.elements.UILabel(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 2, "label"), self.__slider_size), text=f"Seperation: {Config.DEFAULT_SEPARATION_FACTOR:.2f}"),
-                                 "alignment": pygui.elements.UILabel(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 3, "label"), self.__slider_size), text=f"Alignment: {Config.DEFAULT_ALIGNMENT_FACTOR:.2f}"),
-                                 "cohesion": pygui.elements.UILabel(relative_rect=pyg.Rect(self.calculate_gui_pos(window, 4, "label"), self.__slider_size), text=f"Cohesion: {Config.DEFAULT_COHESION_FACTOR:.2f}")}
+        self.__slider_labels = {"protected_range": pygui.elements.UILabel(relative_rect=pyg.Rect((0,0), self.__slider_size), text=f"Protected Range: {Config.DEFAULT_PROTECTED_RANGE}"),
+                                 "visual_range": pygui.elements.UILabel(relative_rect=pyg.Rect((0,0), self.__slider_size), text=f"Visual Range: {Config.DEFAULT_VISUAL_RANGE}"),
+                                 "separation": pygui.elements.UILabel(relative_rect=pyg.Rect((0,0), self.__slider_size), text=f"Separation: {Config.DEFAULT_SEPARATION_FACTOR:.2f}"),
+                                 "alignment": pygui.elements.UILabel(relative_rect=pyg.Rect((0,0), self.__slider_size), text=f"Alignment: {Config.DEFAULT_ALIGNMENT_FACTOR:.2f}"),
+                                 "cohesion": pygui.elements.UILabel(relative_rect=pyg.Rect((0,0), self.__slider_size), text=f"Cohesion: {Config.DEFAULT_COHESION_FACTOR:.2f}")}
 
-    def calculate_gui_pos(self, window, n, type = "slider"):
-        x = (window.w - (self.__gui_sliders * self.__slider_size[0]) - ((self.__gui_sliders - 1) * self.__gui_margin[0])) / 2 + (n * (self.__slider_size[0] + self.__gui_margin[0]))
-        if type == "slider":
-            y = window.y + self.__gui_margin[1]
-        elif type == "label":
-            y = window.y + self.__gui_margin[1] + 35
+        self.set_gui_layout("menu")
 
-        return (x, y)
+    def set_gui_layout(self, state): # TODO: Create sliders on main menu screen (see Gemini)
+        for i, slider_key in enumerate(self.__slider_keys):
+            
+            if state == "menu":
+                if slider_key in ["protected_range", "visual_range"]:
+                    x = (Config.SCREEN_WIDTH // 2) + 50
+                    y = Config.MENU_CONTROLS_Y + (0 * Config.MENU_CONTROLS_MARGIN)
+
+                    if i == 1:
+                        x += (self.__slider_size[0] + 20 + 10)
+
+                    self.__sliders[slider_key].set_dimensions((self.__slider_size[0] + 20, self.__slider_size[1] + 20))
+                else:
+                    x = (Config.SCREEN_WIDTH // 2) + 50
+                    y = Config.MENU_CONTROLS_Y + (2 * Config.MENU_CONTROLS_MARGIN) - 5
+
+                    x += (((self.__slider_size[0] - 29) * (i % 3)))
+
+                    self.__sliders[slider_key].set_dimensions((self.__slider_size[0] - 40, self.__slider_size[1] + 20))
+
+                self.__sliders[slider_key].set_relative_position((x, y + 7))
+
+                # Position labels correctly
+                slider_rect = self.__sliders[slider_key].get_relative_rect()
+                label_rect = self.__slider_labels[slider_key].get_relative_rect()
+
+                label_x = slider_rect.centerx - label_rect.width // 2
+                label_y = slider_rect.bottom
+
+                self.__slider_labels[slider_key].set_relative_position((label_x, label_y - 8))
+                
+            elif state == "game":
+                x = (self.__window.w - (self.__gui_sliders * self.__slider_size[0]) - ((self.__gui_sliders - 1) * self.__gui_margin[0])) / 2 + (i * (self.__slider_size[0] + self.__gui_margin[0]))
+                y = self.__window.y + self.__gui_margin[1]
+
+                self.__sliders[slider_key].set_dimensions((self.__slider_size[0], self.__slider_size[1]))
+                self.__slider_labels[slider_key].set_relative_position((x, y + self.__slider_size[1] - 10))
+                self.__sliders[slider_key].set_relative_position((x, y))
+                
 
     def get_slider(self, slider):
         return self.__sliders[slider]
@@ -154,6 +199,10 @@ class Sim():
     def set_game_state(self, menu_screen, boids_running):
         self.__menu_screen = menu_screen
         self.__boids_running = boids_running
+        if menu_screen:
+            self.__gui.set_gui_layout("menu")
+        else:
+            self.__gui.set_gui_layout("game")
 
     # Event handler
     def handle_events(self, gui):
@@ -207,7 +256,7 @@ class Sim():
     # Check mouse position does not exceed screen boundaries and does not fall in forbidden GUI zone
     def mouse_in_boundary(self):
         mpos = pyg.mouse.get_pos()
-        if mpos[1] < (self.__gui.calculate_gui_pos(self.__window, 0, "label")[1] + self.__gui.get_slider_size()[1]):
+        if mpos[1] < Config.MOUSE_BOUNDARY_MARGIN:
             return False
         elif mpos[0] == 0 or mpos[0] >= (Config.SCREEN_WIDTH - 1):
             return False
@@ -265,13 +314,12 @@ class Sim():
 
         gui.get_slider_label("protected_range").set_text(f"Protected Range: {self.__config_values['protected_range']}")
         gui.get_slider_label("visual_range").set_text(f"Visual Range: {self.__config_values['visual_range']}")
-        gui.get_slider_label("separation").set_text(f"Seperation: {self.__config_values['separation']:.2f}")
+        gui.get_slider_label("separation").set_text(f"Separation: {self.__config_values['separation']:.2f}")
         gui.get_slider_label("alignment").set_text(f"Alignment: {self.__config_values['alignment']:.2f}")
         gui.get_slider_label("cohesion").set_text(f"Cohesion: {self.__config_values['cohesion']:.2f}")
 
     def run(self):
         self.__running = True
-        self.__menu.menu_screen()
         while self.__running:
             # Tick clock to limit FPS
             time_delta = self.__clock.tick(Config.FPS) / 1000.0
@@ -303,26 +351,50 @@ class MainMenu():
         self.__sim = sim
         self.__buttons_dict = {}
 
+        self.__initialise_buttons()
+
     def __create_button(self, x, y, img_path, scale):
         button_img = pyg.image.load(img_path).convert_alpha()
         return Button(x, y, button_img, scale)
 
-    def menu_screen(self):
-        play_button = self.__create_button(400, 400, "images/play_button.png", 0.05)
-        pause_button = self.__create_button(600, 400, "images/play_button.png", 0.05)
-        self.__buttons_dict["play"] = play_button
-        self.__buttons_dict["pause"] = pause_button
+    def __initialise_buttons(self):
+        screen_w = Config.SCREEN_WIDTH
+        maps_section_x = (screen_w // 2) - Config.MENU_CONTROLS_WIDTH
+        config_section_x = (screen_w // 2) + 40
         
-    def render_menu(self, screen):
-        for name, button in self.__buttons_dict.items():
-            if button.draw(screen):
-                self.__button_action(name)
+        # Title
+        self.__buttons_dict["title"] = self.__create_button(Config.MENU_TITLE_X, Config.MENU_TITLE_Y, "images/title.png", 1)
 
-    def __button_action(self, id):
-        if id == "play":
+        # Section headers
+        self.__buttons_dict["maps_title"] = self.__create_button(maps_section_x, Config.MENU_HEADERS_Y, "images/maps_title.png", 0.5)
+        self.__buttons_dict["config_title"] = self.__create_button(config_section_x, Config.MENU_HEADERS_Y, "images/config_title.png", 0.5)
+
+        # Map section
+        self.__buttons_dict["create_map"] = self.__create_button(maps_section_x, Config.MENU_CONTROLS_Y, "images/create_map_button.png", 0.4)
+        self.__buttons_dict["load_map"] = self.__create_button(maps_section_x, Config.MENU_CONTROLS_Y + 90, "images/load_map_button.png", 0.4)
+
+        # Run button
+        self.__buttons_dict["run"] = self.__create_button((screen_w // 2) - 114, Config.MENU_RUN_Y + 100, "images/run_button.png", 0.3)
+
+    def __button_action(self, button_id):
+        if button_id == "run":
             self.__sim.set_game_state(False, True)
-        else:
+        elif button_id == "create_map":
+            print("Create map button clicked")
+        elif button_id == "load_map":
+            print("Load map button clicked")
+        elif button_id == "title":
             pass
+        else:
+            print("Button ID not matched")
+
+    def render_menu(self, screen):
+        screen.fill(Config.SCREEN_COLOUR)
+
+        # Draw all buttons
+        for button_id, button in self.__buttons_dict.items():
+            if button.draw(screen):
+                self.__button_action(button_id)
 
 class Button():
     def __init__(self, x, y, image, scale):
