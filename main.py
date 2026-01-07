@@ -1209,6 +1209,7 @@ class Boid(BoidObject):
                 continue
 
         return self.__limit_force(acc_request, neighbouring_boids)
+    
 
     def __alignment(self):
         acc_request = pyg.math.Vector2(0, 0)
