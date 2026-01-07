@@ -3,10 +3,15 @@ import pygame_gui as pygui
 import random
 import math
 import abc
+import os
+import datetime
+import json
 from enum import Enum
+
 
 class Config():
     IMAGES_FOLDER = "images"
+    MAPS_FOLDER = "maps"
 
     # Sim constants
     SCREEN_WIDTH = 1000
@@ -52,6 +57,8 @@ class Config():
     MENU_CONTROLS_WIDTH = 400
     MENU_CONTROLS_MARGIN = 50
     MENU_RUN_Y = 560
+    LOAD_DIALOG_SIZE = (800, 400)
+    SAVE_DIALOG_SIZE = (200, 50)
 
     # Map builder layout
     TOOLS_X = 40
@@ -177,6 +184,7 @@ class Sim():
         self.__map_builder = MapBuilder(self)
         self.__boundary_manager = BoundaryManager(self)
         self.__assembly_point = None
+        self.__map_loaded = False
 
         self.__config_values = {"visual_range": Config.DEFAULT_VISUAL_RANGE, 
                                "protected_range": Config.DEFAULT_PROTECTED_RANGE,
@@ -194,7 +202,8 @@ class Sim():
         # TODO: add window icon here
 
         # Instantiate a container full of boids
-        self.__boid_container = [Boid(self) for _ in range(Config.NUMBER_OF_BOIDS)]
+        # self.__boid_container = [Boid(self) for _ in range(Config.NUMBER_OF_BOIDS)]
+        self.__boid_container = []
 
         # Create predator container
         self.__predator_container = []
@@ -204,6 +213,9 @@ class Sim():
 
     def get_config_value(self, type):
         return self.__config_values[type]
+    
+    def get_map_builder(self):
+        return self.__map_builder
 
     def get_window(self):
         return self.__window
@@ -211,8 +223,27 @@ class Sim():
     def get_boid_container(self):
         return self.__boid_container
     
-    def set_boid_container(self, lst):
-        self.__boid_container = lst
+    def is_map_loaded(self):
+        return self.__map_loaded
+    
+    def map_loaded(self):
+        self.__map_loaded = True
+
+    def map_unloaded(self):
+        self.__map_loaded = False
+    
+    def create_boid_container(self, lst, json=False):
+        if json:
+            boids = []
+            for pos in lst:
+                boid = Boid(self)
+                boid.set_pos(pyg.math.Vector2(pos))
+                boids.append(boid)
+            self.__map_builder.set_boids(boids)
+
+        else:
+            for boid in lst:
+                self.__boid_container.append(boid)
     
     def get_predator_container(self):
         return self.__predator_container
@@ -220,14 +251,43 @@ class Sim():
     def get_boundary_container(self):
         return self.__boundary_container
     
-    def set_boundary_container(self, lst):
-        self.__boundary_container = lst 
+    def create_boundary_container(self, lst, json=False):
+        if json:
+            boundaries = []
+            for pos in lst:
+                boundaries.append(Boundary((pyg.math.Vector2(pos[0]), pyg.math.Vector2(pos[1]))))
+            self.__map_builder.set_boundaries(boundaries)
+        else:
+            for boundary in lst:
+                self.__boundary_container.append(boundary)
     
     def get_assembly_point(self):
         return self.__assembly_point
+
+    def reset_simulation(self):
+        self.__boid_container = []
+        self.__boundary_container = []
+        self.__predator_container = []
+        self.__assembly_point = None
     
-    def set_assembly_point(self, point):
-        self.__assembly_point = point
+    def create_assembly_point(self, point, json=False):
+        if json:
+            self.__map_builder.set_assembly(AssemblyPoint(pyg.math.Vector2(point)))
+        else:
+            self.__assembly_point = point
+
+    def import_objects_to_sim(self, boundaries, assembly, boids):
+        self.reset_simulation()
+        self.create_boundary_container(boundaries)
+        self.create_boid_container(boids)
+        self.create_assembly_point(assembly)
+
+    def import_objects_to_builder(self, boundaries, assembly, boids, img_path):
+        self.__map_builder.reset()
+        self.create_boundary_container(boundaries, True)
+        self.create_boid_container(boids, True)
+        self.create_assembly_point(assembly, True)
+        self.__map_builder.handle_image(img_path)
     
     def get_gui_manager(self):
         return self.__gui.get_gui_manager()
@@ -274,7 +334,11 @@ class Sim():
 
                 # File path selected
                 if event.type == pygui.UI_FILE_DIALOG_PATH_PICKED:
-                    self.__map_builder.handle_image(event.text)
+                    if event.ui_object_id == "#file_explorer":
+                        self.__map_builder.handle_image(event.text)
+                    elif event.ui_object_id == "#load_map_dialog":
+                        self.__menu.handle_load_path(event.text)
+                    
 
                 # Check for keypresses to place objects
                 if event.type == pyg.KEYDOWN:
@@ -408,6 +472,8 @@ class Menu():
         self.__sim = sim
         self.__buttons_dict = {}
 
+        self.__load_dialog = None
+
         self.__initialise_buttons()
 
     def __initialise_buttons(self):
@@ -431,15 +497,62 @@ class Menu():
 
     def __button_action(self, button_id):
         if button_id == "run":
+            if not self.__sim.is_map_loaded():
+                print("No map loaded")
             self.__sim.set_game_state("simulation")
         elif button_id == "create_map":
+            self.__sim.get_map_builder().reset()
             self.__sim.set_game_state("map_builder")
         elif button_id == "load_map":
-            print("Load map button clicked")
+            self.__open_load_dialog()
+            # Show file selector
+            
+            
         elif button_id == "title":
             pass
         else:
             print("Button ID not matched")
+
+    def __open_load_dialog(self):
+        if self.__load_dialog is not None:
+            self.__load_dialog.kill()
+
+        gui_manager = self.__sim.get_gui_manager()
+
+        dialog_rect = pyg.Rect((Config.SCREEN_WIDTH // 2 - 400, Config.SCREEN_HEIGHT // 2 - 180), Config.LOAD_DIALOG_SIZE)
+
+        maps_path = os.path.join(os.getcwd(), Config.MAPS_FOLDER)
+
+        self.__load_dialog = pygui.windows.ui_file_dialog.UIFileDialog(
+            rect=dialog_rect,
+            manager=gui_manager,
+            window_title="Load Map",
+            initial_file_path=os.path.join(maps_path, ""),
+            allow_picking_directories=False,
+            allow_existing_files_only=True, 
+            allowed_suffixes={'.json'},
+            object_id="#load_map_dialog"
+        )
+
+    def handle_load_path(self, path):
+        if not os.path.exists(path):
+            print(f"File not found: {path}")
+            return
+        
+        if not path.lower().endswith('.json'):
+            print("Select a .json file")
+            return
+        
+        success, data, error = JSONManager.load_map(path)
+
+        if success:
+            json_manager = JSONManager(self.__sim)
+            json_manager.import_map(data)
+            self.__sim.map_loaded()
+            self.__sim.set_game_state("map_builder")
+
+        else:
+            print(f"Load failed with: {error}")
 
     def render_menu(self, screen):
         screen.fill(Config.SCREEN_COLOUR)
@@ -486,8 +599,10 @@ class Button():
 class MapBuilder():
     def __init__(self, sim):
         self.__sim = sim
+        self.__jsonmanager = JSONManager(sim)
 
         self.__tracing_img = None
+        self.__tracing_img_path = None
 
         # Create temporary object containers 
         self.__builder_boundaries = []
@@ -504,10 +619,12 @@ class MapBuilder():
         self.__confirm_buttons = {}
         self.__create_map_buttons()
 
-        # Trace image manager
-        self.__image_importer = ImageImporter(self.__sim)
+        # Instantiate file manager
+        self.__file_manager = FileManager(self.__sim)
 
-
+        # Dialog managers
+        self.__save_dialog = None
+        self.__load_dialog = None
 
     # Resets map builder variables
     def reset(self):
@@ -515,9 +632,22 @@ class MapBuilder():
         self.__builder_assembly = None
         self.__builder_boids = []
         self.__tracing_img = None
+        self.__tracing_img_path = None
         self.__current_tool = None
         self.__drawing_wall = False
         self.__wall_start = None
+
+        self.__save_dialog = None
+        self.__sim.map_unloaded()
+
+    def set_boundaries(self, lst):
+        self.__builder_boundaries = lst
+
+    def set_assembly(self, point):
+        self.__builder_assembly = point
+
+    def set_boids(self, lst):
+        self.__builder_boids = lst
 
     def __create_map_buttons(self):
         tools_list = [
@@ -549,29 +679,77 @@ class MapBuilder():
 
     def confirm_click(self, id):
         if id == "confirm":
-            print("Confirm clicked")
             if not self.__builder_assembly:
                 print("Must place assembly point")
+                return
             
             elif len(self.__builder_boids) == 0:
                 print("Must place at least one boid")
+                return
+            
+            self.__sim.import_objects_to_sim(self.__builder_boundaries, self.__builder_assembly, self.__builder_boids)
 
-            else:
-                self.__sim.set_boundary_container(self.__builder_boundaries)
-                self.__sim.set_boid_container(self.__builder_boids)
-                self.__sim.set_assembly_point(self.__builder_assembly)
-                self.__sim.set_game_state("simulation")
+            if self.__sim.is_map_loaded():
+                self.__sim.set_game_state("menu")
+                return
+            
+            if self.__save_dialog is None:
+                self.__open_save_dialog()
+                return
+        
+            file_input = self.__save_dialog.get_text().strip()
+            self.__handle_save_path(file_input)
+
 
         elif id == "cancel":
-            print("Cancel clicked")
             self.reset()
+            self.__sim.map_unloaded()
+            self.__sim.set_game_state("menu")
+
+    def __open_save_dialog(self):
+        if self.__save_dialog is not None:
+            self.__save_dialog.kill()
+
+        gui_manager = self.__sim.get_gui_manager()
+
+        dialog_rect = pyg.Rect((Config.SCREEN_WIDTH // 2 + 208, Config.SCREEN_HEIGHT - 78), Config.SAVE_DIALOG_SIZE)
+        self.__save_dialog = pygui.elements.UITextEntryLine(relative_rect=dialog_rect, manager=gui_manager, object_id="#save_file_path")
+        self.__save_dialog.set_text("map.json")
+
+    def __handle_save_path(self, path):
+        if self.__save_dialog is None:
+            print("No path entered")
+            return
+
+        if not path.endswith('.json'):
+            path += '.json'
+
+        maps_dir = os.path.join(os.getcwd(), Config.MAPS_FOLDER)
+        if maps_dir and not os.path.exists(maps_dir):
+            try:
+                os.makedirs(maps_dir)
+            except Exception as e:
+                print(f"Error creating directory:\n{str(e)}")
+                return
+            
+        path = os.path.join(maps_dir, path)
+            
+        success, error = self.__jsonmanager.save_map(path, self.__builder_boundaries, self.__builder_assembly, self.__builder_boids, self.__tracing_img_path)
+
+        self.__save_dialog.kill()
+
+        if success:
+            self.__sim.set_game_state('menu')
+        else:
+            print(f"Save failed: {error}")
             self.__sim.set_game_state("menu")
 
     def __import_image(self):
-        path = self.__image_importer.create_file_explorer()
+        self.__file_manager.create_file_explorer()
 
     def handle_image(self, path):
         if path:
+            self.__tracing_img_path = path
             try:
                 # Original image file
                 original = pyg.image.load(path).convert_alpha()
@@ -728,18 +906,139 @@ class MapBuilder():
     
     def get_boids(self):
         return self.__builder_boids
+    
+    def set_tracing_image(self, img):
+        self.__tracing_img = img
 
-class ImageImporter():
+class FileManager():
     def __init__(self, sim):
         self.__sim = sim
 
     def create_file_explorer(self):
         gui_manager = self.__sim.get_gui_manager()
         file_rect = pyg.Rect((260, 215), (600, 380))
-        file_explorer = pygui.windows.ui_file_dialog.UIFileDialog(rect=file_rect, manager=gui_manager, window_title="Choose a map image", initial_file_path=".", allowed_suffixes={'.png', '.jpeg ', '.jpg'}, object_id="file_explorer")
+        file_explorer = pygui.windows.ui_file_dialog.UIFileDialog(rect=file_rect, manager=gui_manager, window_title="Choose a map image", initial_file_path=".", allowed_suffixes={'.png', '.jpeg ', '.jpg'}, object_id="#file_explorer")
         file_explorer.resizable = False
 
         return None
+
+class JSONManager():
+    def __init__(self, sim):
+        self.__sim = sim
+
+    @staticmethod
+    def save_map(path, boundaries, assembly, boids, img_path=None):
+        try:
+            if not path.lower().endswith('.json'):
+                path += '.json'
+
+            map_data = {
+                "map_name": os.path.basename(path).split(".")[0],
+                "created": datetime.datetime.now().isoformat(),
+                "map_image": img_path,
+                "assembly_point": {
+                    "x": int(assembly.get_pos()[0]),
+                    "y": int(assembly.get_pos()[1]),
+                },
+                "boundaries": [],
+                "boids": []
+            }
+
+            # Add boundaries to JSON
+            for boundary in boundaries:
+                start, end = boundary.get_pos()
+                map_data["boundaries"].append({
+                    "start": {
+                        "x": int(start[0]),
+                        "y": int(start[1])
+                    },
+                    "end": {
+                        "x": int(end[0]),
+                        "y": int(end[1])
+                    }
+                })
+
+            # Add boids to JSON
+            for boid in boids:
+                pos = boid.get_pos()
+                map_data["boids"].append({
+                    "x": int(pos[0]),
+                    "y": int(pos[1])
+                })
+
+            # Write to file
+            with open(path, 'w') as file:
+                json.dump(map_data, file)
+
+            return (True, None)
+
+        except PermissionError:
+            return (False, f"Insufficient permission to write to {path}")
+        except IOError as e:
+            return (False, f"File write error: {str(e)}")
+        except Exception as e:
+            return (False, f"An unexpected error occurred: {str(e)}")
+        
+    @staticmethod
+    def load_map(path):
+        try:
+            if not os.path.exists(path):
+                return (False, None, f"File could not be found at: {path}")
+
+            if not path.lower().endswith('.json'):
+                return (False, None, f"File must end with .json")
+            
+            with open(path, 'r') as file:
+                map_data = json.load(file)
+
+            # Validate loaded data
+            is_valid = JSONManager.__validate_data(map_data)
+            if not is_valid[0]:
+                return (False, None, is_valid[1]) # Return error message
+            
+            # Parse data
+            parsed_data = {
+                "boundaries": [],
+                "assembly_point": None,
+                "boids": [],
+                "map_image": map_data.get("map_image", None)
+            }
+
+            # Assembly point
+            parsed_data["assembly_point"] = (map_data["assembly_point"]["x"], map_data["assembly_point"]["y"])
+
+            # Boundaries
+            for boundary in map_data["boundaries"]:
+                start = (boundary["start"]["x"], boundary["start"]["y"])
+                end = (boundary["end"]["x"], boundary["end"]["y"])
+                parsed_data["boundaries"].append((start, end))
+
+
+            # Boids
+            for boid in map_data["boids"]:
+                parsed_data["boids"].append((boid["x"], boid["y"]))
+
+            return (True, parsed_data, None)
+
+        except json.JSONDecodeError as e:
+            return (False, None, f"Invalid JSON format: {str(e)}")
+        except PermissionError:
+            return (False, None, f"Insufficient permission to read from {path}")
+        except IOError as e:
+            return (False, None, f"File read error: {str(e)}")
+        except Exception as e:
+            return (False, None, f"An unexpected error occurred: {str(e)}")
+        
+    @staticmethod
+    def __validate_data(data):
+        return (True, None)
+    
+    def import_map(self, data):
+        boundaries = data["boundaries"]
+        assembly = data["assembly_point"]
+        boids = data["boids"]
+        tracing_image = data["map_image"]
+        self.__sim.import_objects_to_builder(boundaries,  assembly, boids, tracing_image)
 
 # Abstract class so it cannot be instantiated
 class BoidObject(abc.ABC):
