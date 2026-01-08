@@ -9,7 +9,7 @@ import json
 from enum import Enum
 
 
-class Config():
+class Config:
     IMAGES_FOLDER = "images"
     MAPS_FOLDER = "maps"
 
@@ -70,10 +70,48 @@ class Config():
     IMAGE_MARGIN_Y = 100
     ERASE_RADIUS = 12
 
+    # Playback controls layout
+    PLAYBACK_Y = SCREEN_HEIGHT - 80
+    PLAYBACK_X = SCREEN_WIDTH - 90
+    PLAYBACK_SPACING = 60
+
 class GameState(Enum):
     MENU = "menu"
     MAP_BUILDER = "map_builder"
     SIMULATION = "simulation"
+
+class PlaybackControls:
+    def __init__(self, sim):
+        self.__sim = sim
+        self.__is_running = True
+
+        self.__control_buttons = {}
+
+        self.__control_buttons["play"] = Button(Config.PLAYBACK_X, Config.PLAYBACK_Y, f"{Config.IMAGES_FOLDER}/play_button.png", 0.3)
+        self.__control_buttons["pause"] = Button(Config.PLAYBACK_X, Config.PLAYBACK_Y, f"{Config.IMAGES_FOLDER}/pause_button.png", 0.3)
+        self.__control_buttons["step"] = Button(Config.PLAYBACK_X - Config.PLAYBACK_SPACING, Config.PLAYBACK_Y, f"{Config.IMAGES_FOLDER}/step_button.png", 0.3)
+
+    def is_running(self):
+        return self.__is_running
+    
+    def play(self):
+        self.__is_running = True
+
+    def pause(self):
+        self.__is_running = False
+
+    def step(self):
+        self.__sim.step()
+
+    def draw_buttons(self, screen):
+        if self.__is_running:
+            if self.__control_buttons["pause"].draw(screen):
+                self.pause()
+        else:
+            if self.__control_buttons["play"].draw(screen):
+                self.play()
+            if self.__control_buttons["step"].draw(screen):
+                self.step()
 
 class GUI():
     def __init__(self, sim):
@@ -183,6 +221,7 @@ class Sim():
         self.__menu = Menu(self)
         self.__map_builder = MapBuilder(self)
         self.__boundary_manager = BoundaryManager(self)
+        self.__playback_controls = PlaybackControls(self)
         self.__assembly_point = None
         self.__map_loaded = False
 
@@ -450,8 +489,11 @@ class Sim():
 
             # Advance one step of simulation and render
             if self.__current_game_state == GameState.SIMULATION:
-                self.step()
+                if self.__playback_controls.is_running():
+                    self.step()
+
                 self.render()
+                self.__playback_controls.draw_buttons(self.__screen)
             
             # Update GUI values
             self.update_gui_values(self.__gui)
