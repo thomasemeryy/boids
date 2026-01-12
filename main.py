@@ -8,7 +8,6 @@ import datetime
 import json
 from enum import Enum
 
-
 class Config:
     IMAGES_FOLDER = "images"
     MAPS_FOLDER = "maps"
@@ -479,7 +478,7 @@ class Sim():
         while self.__running:
             # Tick clock to limit FPS
             time_delta = self.__clock.tick(Config.FPS) / 1000.0
-            # print(self.__clock.get_fps())
+            print(self.__clock.get_fps())
 
             # Check for any pygame events
             self.handle_events(self.__gui)
@@ -1205,8 +1204,6 @@ class Boid(BoidObject):
 
         for boundary in nearby_boundaries:
             will_collide, collision_point = boundary.will_collide(self)
-
-            print(f"Will collide: {will_collide} // Collision point: {collision_point}")
 
             # Check if a collision is due in the next frame
             if will_collide:
