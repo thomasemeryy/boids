@@ -478,7 +478,7 @@ class Sim():
         while self.__running:
             # Tick clock to limit FPS
             time_delta = self.__clock.tick(Config.FPS) / 1000.0
-            print(self.__clock.get_fps())
+            # print(self.__clock.get_fps())
 
             # Check for any pygame events
             self.handle_events(self.__gui)
@@ -507,6 +507,123 @@ class Sim():
             
             # Swap buffers
             pyg.display.flip()
+
+class PathNode:
+    def __init__(self, pos, type, id):
+        self.__pos = pyg.math.Vector2(pos)
+        self.__type = type
+        self.__id = id
+        self.__neighbours = {}
+
+    def add_neighbour(self, id, distance):
+        self.__neighbours[id] = distance
+
+    def get_neighbours(self):
+        return self.__neighbours
+    
+    def get_pos(self):
+        return self.__pos
+    
+    def get_type(self):
+        return self.__type
+    
+    def get_id(self):
+        return self.__id
+    
+    def draw(self, screen):
+        pass # Draw function
+
+class PathGraph:
+    def __init__(self):
+        self.__nodes = {}
+        self.__next_id = {}
+        self.__adjacency_list = {}
+
+    def add_node(self, pos, type):
+        id = self.__next_id
+        self.__next_id += 1
+
+        node = PathNode(pos, type, id)
+        self.__nodes[id] = node
+        self.__adjacency_list[id] = {}
+
+    def add_edge(self, id_a, id_b):
+        if id_a not in self.__nodes or id_b not in self.__nodes:
+            return
+        
+        node_a = self.__nodes[id_a]
+        node_b = self.__nodes[id_b]
+
+        distance = node_a.get_pos().distance_to(node_b.get_pos())
+
+        self.__adjacency_list[id_a][id_b] = distance
+        node_a.add_neighbour(id_b, distance)
+
+    def remove_node(self, id):
+        if id in self.__nodes:
+            del self.__nodes[id]
+            del self.__adjacency_list[id]
+
+            for neighbours in self.__adjacency_list.values():
+                if id in neighbours:
+                    del neighbours[id]
+
+    def get_node(self, id):
+        try:
+            node = self.__nodes[id]
+            return node
+        except KeyError:
+            return None
+
+    def get_all_nodes(self):
+        return self.__nodes
+    
+    def dijkstra(self, start, end):
+        if start not in self.__nodes or end not in self.__nodes:
+            return None
+        
+        distances = {id: float('inf') for id in self.__nodes}
+        distances[start] = 0
+        previous = {id: None for id in self.__nodes}
+
+        unvisited = set(self.__nodes)
+
+        while unvisited:
+            current_id = None
+            smallest_distance = float('inf')
+
+            for id in unvisited:
+                if distances[id] < smallest_distance:
+                    smallest_distance = distances[id]
+                    current_id = id
+
+            if current_id is None:
+                break
+
+            unvisited.remove(current_id)
+
+            if current_id == end:
+                break
+
+            for neighbour_id, edge_dist in self.__adjacency_list[current_id].items():
+                if neighbour_id in unvisited:
+                    new_dist = distances[id] + edge_dist
+                    if new_dist < distances[neighbour_id]:
+                        distances[neighbour_id] = new_dist
+                        previous[neighbour_id] = current_id
+
+        if distances[end] == float('inf'):
+            return None
+
+        path = []
+        current = end
+        while current is not None:
+            path.append(current)
+            current = previous(current)
+
+        path.reverse()
+        return path      
+
 
 class Menu():
     def __init__(self, sim):
