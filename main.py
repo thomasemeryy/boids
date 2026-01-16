@@ -32,6 +32,8 @@ class Config:
     BOID_COLOUR = (255, 255, 255)
     PREDATOR_COLOUR = (255, 0, 0)
     ASSEMBLY_COLOUR = (255, 255, 0)
+    EXIT_COLOUR = (0, 255, 0)
+    DESTINATION_COLOUR = (0, 150, 255)
     DEFAULT_VISUAL_RANGE = 100
     DEFAULT_PROTECTED_RANGE = 20
     DEFAULT_PREDATOR_RANGE = 30
@@ -61,7 +63,7 @@ class Config:
 
     # Map builder layout
     TOOLS_X = 40
-    TOOLS_Y = 200
+    TOOLS_Y = 100
     TOOLS_MARGIN = 80
     CONFIRM_X = SCREEN_WIDTH - 90
     CONFIRM_Y = SCREEN_HEIGHT - 80
@@ -223,6 +225,7 @@ class Sim():
         self.__playback_controls = PlaybackControls(self)
         self.__assembly_point = None
         self.__map_loaded = False
+        self.__path_graph = PathGraph()
 
         self.__config_values = {"visual_range": Config.DEFAULT_VISUAL_RANGE, 
                                "protected_range": Config.DEFAULT_PROTECTED_RANGE,
@@ -251,6 +254,11 @@ class Sim():
 
     def get_config_value(self, type):
         return self.__config_values[type]
+    
+    def get_path_graph(self):
+        return self.__path_graph
+    
+    # TODO: Add import graph function from JSON
     
     def get_map_builder(self):
         return self.__map_builder
@@ -307,12 +315,21 @@ class Sim():
         self.__boundary_container = []
         self.__predator_container = []
         self.__assembly_point = None
+        self.__path_graph.clear()
+
+    def enable_pathfinding(self):
+        graph = self.__path_graph
+
+        for boid in self.__boid_container:
+            boid.assign_path(graph)
+
     
     def create_assembly_point(self, point, json=False):
         if json:
             self.__map_builder.set_assembly(AssemblyPoint(pyg.math.Vector2(point)))
         else:
             self.__assembly_point = point
+            self.__map_builder.get_builder_graph().add_node(pyg.math.Vector2(point.get_pos()), 'assembly')
 
     def import_objects_to_sim(self, boundaries, assembly, boids):
         self.reset_simulation()
@@ -389,31 +406,7 @@ class Sim():
                             self.__map_builder.wall_end(pyg.mouse.get_pos(), True)
 
                     if self.__current_game_state == GameState.SIMULATION:
-                        if event.key == pyg.K_1:
-                            if self.mouse_in_boundary():
-                                self.__boundary_manager.set_start_pos(pyg.mouse.get_pos())
-                            else:
-                                print("Mouse out of bounds")
-
-                        elif event.key == pyg.K_2:
-                            start_pos = self.__boundary_manager.get_start_pos()
-                            if start_pos is not None:
-                                    if self.mouse_in_boundary():
-                                        end_pos = pyg.mouse.get_pos()
-                                        if (start_pos[0] - end_pos[0])**2 + (start_pos[1] - end_pos[1])**2 > 0.01:
-                                            new_boundary = Boundary((pyg.math.Vector2(start_pos), pyg.math.Vector2(end_pos)))
-                                            self.__boundary_container.append(new_boundary)
-                                            print(f"Start: {start_pos} // End: {end_pos}")
-                                            self.__boundary_manager.clear_start_pos()
-                                        else:
-                                            print("Cannot have length zero")
-
-                                    else:
-                                        print("Mouse out of bounds")
-                            else:
-                                print("Must set start position first!")
-                        elif event.key == pyg.K_3:
-                            self.__assembly_point = AssemblyPoint(pyg.mouse.get_pos())
+                        pass
                             
                 gui.process_gui_event(event)
 
@@ -451,6 +444,8 @@ class Sim():
             
         if self.__assembly_point is not None:
             self.__assembly_point.draw(self.__screen)
+
+        self.__path_graph.draw(self.__screen)
 
     def create_grids(self): # TODO: Unfinished - use for spacial hashing
         self.standard_grid_dimensions = (Config.SCREEN_WIDTH // Config.NUMBER_OF_GRIDS_WIDE, Config.SCREEN_HEIGHT // Config.NUMBER_OF_GRIDS_HIGH)
@@ -531,12 +526,19 @@ class PathNode:
         return self.__id
     
     def draw(self, screen):
-        pass # Draw function
+        if self.__type == 'exit':
+            pyg.draw.circle(screen, Config.EXIT_COLOUR, (int(self.__pos.x), int(self.__pos.y)), 15)
+        elif self.__type == 'destination':
+            pyg.draw.circle(screen, Config.DESTINATION_COLOUR, (int(self.__pos.x), int(self.__pos.y)), 8)
+        else:
+            pyg.draw.circle(screen, Config.ASSEMBLY_COLOUR, (int(self.__pos.x), int(self.__pos.y)), 25)
+
+
 
 class PathGraph:
     def __init__(self):
         self.__nodes = {}
-        self.__next_id = {}
+        self.__next_id = 0
         self.__adjacency_list = {}
 
     def add_node(self, pos, type):
@@ -546,6 +548,8 @@ class PathGraph:
         node = PathNode(pos, type, id)
         self.__nodes[id] = node
         self.__adjacency_list[id] = {}
+
+        return id
 
     def add_edge(self, id_a, id_b):
         if id_a not in self.__nodes or id_b not in self.__nodes:
@@ -574,6 +578,12 @@ class PathGraph:
             return node
         except KeyError:
             return None
+        
+    def get_adjacency_list(self):
+        return self.__adjacency_list
+        
+    def get_nodes_by_type(self, type):
+        return [node for node in self.__nodes.values() if node.get_type() == type]
 
     def get_all_nodes(self):
         return self.__nodes
@@ -592,10 +602,10 @@ class PathGraph:
             current_id = None
             smallest_distance = float('inf')
 
-            for id in unvisited:
-                if distances[id] < smallest_distance:
-                    smallest_distance = distances[id]
-                    current_id = id
+            for node_id in unvisited:
+                if distances[node_id] < smallest_distance:
+                    smallest_distance = distances[node_id]
+                    current_id = node_id
 
             if current_id is None:
                 break
@@ -607,7 +617,7 @@ class PathGraph:
 
             for neighbour_id, edge_dist in self.__adjacency_list[current_id].items():
                 if neighbour_id in unvisited:
-                    new_dist = distances[id] + edge_dist
+                    new_dist = distances[current_id] + edge_dist
                     if new_dist < distances[neighbour_id]:
                         distances[neighbour_id] = new_dist
                         previous[neighbour_id] = current_id
@@ -619,11 +629,73 @@ class PathGraph:
         current = end
         while current is not None:
             path.append(current)
-            current = previous(current)
+            current = previous[current]
 
         path.reverse()
         return path      
+    
+    def find_nearest_node(self, pos, type):
+        remaining_checks = self.__nodes.values()
 
+        if type:
+            remaining_checks = [n for n in remaining_checks if n.get_type() == type]
+
+        if not remaining_checks:
+            return None
+        
+        nearest = min(remaining_checks, key=lambda n: pos.distance_squared_to(n.get_pos()))
+        return nearest.get_id()
+    
+    def draw(self, screen):
+        for node_id, neighbours in self.__adjacency_list.items():
+            node = self.__nodes[node_id]
+            for neighbour_id in neighbours:
+                neighbour = self.__nodes[neighbour_id]
+                pyg.draw.line(screen, (100, 100, 100), (int(node.get_pos().x), int(node.get_pos().y)), (int(neighbour.get_pos().x), int(neighbour.get_pos().y)), 2)
+                
+        for node in self.__nodes.values():
+            node.draw(screen)
+
+    def clear(self):
+        self.__nodes.clear()
+        self.__adjacency_list.clear()
+        self.__next_id = 0
+
+    # Add to dict and from dict functions here for JSON capabilities
+
+class PathBehaviour:
+    def __init__(self, path, graph):
+        self.__path = path
+        self.__graph = graph
+        self.__current_destination_index = 0
+        self.__completed = False
+
+    def get_current_destination(self):
+        if self.__completed or not self.__path:
+            return None
+        
+        if self.__current_destination_index >= len(self.__path):
+            self.__completed = True
+            return None
+        
+        id = self.__path[self.__current_destination_index]
+        node = self.__graph.get_node(id)
+
+        return node.get_pos() if node else None
+    
+    def advance_destination(self):
+        self.__current_destination_index += 1
+
+        if self.__current_destination_index >= len(self.__path):
+            self.__completed = True
+
+    def is_completed(self):
+        return self.__completed
+    
+    def get_path(self):
+        return self.__path
+    
+     
 
 class Menu():
     def __init__(self, sim):
@@ -657,6 +729,7 @@ class Menu():
         if button_id == "run":
             if not self.__sim.is_map_loaded():
                 print("No map loaded")
+            self.__sim.enable_pathfinding()
             self.__sim.set_game_state("simulation")
         elif button_id == "create_map":
             self.__sim.get_map_builder().reset()
@@ -766,13 +839,18 @@ class MapBuilder():
         self.__builder_boundaries = []
         self.__builder_assembly = None
         self.__builder_boids = []
+        self.__builder_graph = PathGraph()
 
         # Manage tool states
         self.__current_tool = None
         self.__drawing_wall = False
         self.__wall_start = None
 
-        # UI buttons? TODO
+        # Edge drawing
+        self.__edge_mode = False
+        self.__edge_start = None
+
+        # UI buttons?
         self.__tool_buttons = {}
         self.__confirm_buttons = {}
         self.__create_map_buttons()
@@ -789,11 +867,15 @@ class MapBuilder():
         self.__builder_boundaries = []
         self.__builder_assembly = None
         self.__builder_boids = []
+        self.__builder_graph.clear()
         self.__tracing_img = None
         self.__tracing_img_path = None
         self.__current_tool = None
         self.__drawing_wall = False
         self.__wall_start = None
+
+        self.__edge_mode = False
+        self.__edge_start = None
 
         self.__save_dialog = None
         self.__sim.map_unloaded()
@@ -803,17 +885,24 @@ class MapBuilder():
 
     def set_assembly(self, point):
         self.__builder_assembly = point
+        self.__builder_graph.add_node(point.get_pos(), 'assembly')
 
     def set_boids(self, lst):
         self.__builder_boids = lst
+
+    def get_builder_graph(self):
+        return self.__builder_graph
 
     def __create_map_buttons(self):
         tools_list = [
             ("import_img", f"{Config.IMAGES_FOLDER}/add_image_tool.png", 0),
             ("wall", f"{Config.IMAGES_FOLDER}/wall_tool.png", 1),
             ("assembly", f"{Config.IMAGES_FOLDER}/assembly_tool.png", 2),
-            ("boid", f"{Config.IMAGES_FOLDER}/boid_tool.png", 3),
-            ("eraser", f"{Config.IMAGES_FOLDER}/eraser_tool.png", 4)
+            ("exit", f"{Config.IMAGES_FOLDER}/exit_tool.png", 3),
+            ("destination", f"{Config.IMAGES_FOLDER}/destination_tool.png", 4),
+            ("edge", f"{Config.IMAGES_FOLDER}/edge_tool.png", 5),
+            ("boid", f"{Config.IMAGES_FOLDER}/boid_tool.png", 6),
+            ("eraser", f"{Config.IMAGES_FOLDER}/eraser_tool.png", 7)
         ]
         
         for id, img, i in tools_list:
@@ -847,22 +936,42 @@ class MapBuilder():
             
             self.__sim.import_objects_to_sim(self.__builder_boundaries, self.__builder_assembly, self.__builder_boids)
 
+            self.__import_graph_to_sim()
+
             if self.__sim.is_map_loaded():
                 self.__sim.set_game_state("menu")
                 return
             
+            # TODO: Save graph JSON
+            
             if self.__save_dialog is None:
                 self.__open_save_dialog()
                 return
-        
+
             file_input = self.__save_dialog.get_text().strip()
             self.__handle_save_path(file_input)
 
+        
 
         elif id == "cancel":
             self.reset()
             self.__sim.map_unloaded()
             self.__sim.set_game_state("menu")
+
+    def __import_graph_to_sim(self):
+        sim_graph = self.__sim.get_path_graph()
+        sim_graph.clear()
+
+        node_map = {}
+        for node in self.__builder_graph.get_all_nodes().values():
+            new_id = sim_graph.add_node(node.get_pos(), node.get_type())
+            node_map[node.get_id()] = new_id
+
+        for id, neighbours in self.__builder_graph.get_adjacency_list().items():
+            for neighbour_id in neighbours.keys():
+                new_id = node_map[id]
+                new_neighbour_id = node_map[neighbour_id]
+                sim_graph.add_edge(new_id, new_neighbour_id)
 
     def __open_save_dialog(self):
         if self.__save_dialog is not None:
@@ -957,6 +1066,15 @@ class MapBuilder():
         elif self.__current_tool == "assembly":
             self.__use_assembly_tool(pos)
 
+        elif self.__current_tool == "exit":
+            self.__use_exit_tool(pos)
+
+        elif self.__current_tool == "destination":
+            self.__use_destination_tool(pos)
+
+        elif self.__current_tool == "edge":
+            self.__use_edge_tool(pos)
+
         elif self.__current_tool == "boid":
             self.__use_boid_tool(pos)
 
@@ -988,14 +1106,57 @@ class MapBuilder():
             self.__wall_start = None
 
     def __use_assembly_tool(self, pos):
+        if self.__builder_assembly:
+            for id, node in list(self.__builder_graph.get_all_nodes().items()):
+                if node.get_type() == 'assembly':
+                    self.__builder_graph.remove_node(id)
+                    break
+
         self.__builder_assembly = AssemblyPoint(pos)
+        self.__builder_graph.add_node(pos, 'assembly')
 
     def __use_boid_tool(self, pos):
         new_boid = Boid(self.__sim)
         new_boid.set_pos(pyg.math.Vector2(pos))
         self.__builder_boids.append(new_boid)
 
+    def __use_exit_tool(self, pos):
+        id = self.__builder_graph.add_node(pos, 'exit')
+
+    def __use_destination_tool(self, pos):
+        id = self.__builder_graph.add_node(pos, 'destination')
+
+    def __use_edge_tool(self, pos):
+        clicked_id = self.__find_node_at_pos(pos, 20)
+
+        if clicked_id is None:
+            self.__edge_start = None
+            return
+        
+        if self.__edge_start is None:
+            self.__edge_start = clicked_id
+
+        else:
+            if self.__edge_start != clicked_id:
+                self.__builder_graph.add_edge(self.__edge_start, clicked_id)
+
+            self.__edge_start = None
+
+    def __find_node_at_pos(self, pos, radius):
+        pos_vector = pyg.math.Vector2(pos)
+
+        for node in self.__builder_graph.get_all_nodes().values():
+            if node.get_pos().distance_squared_to(pos_vector) < radius ** 2:
+                return node.get_id()
+            
+        return None
+
     def __use_erase_tool(self, pos):
+        node_id = self.__find_node_at_pos(pos, Config.ERASE_RADIUS)
+        if node_id is not None:
+            self.__builder_graph.remove_node(node_id)
+            return 
+
         for boundary in self.__builder_boundaries[:]:
             if self.__near_boundary(pos, boundary, Config.ERASE_RADIUS):
                 self.__builder_boundaries.remove(boundary)
@@ -1042,6 +1203,15 @@ class MapBuilder():
 
         for boid in self.__builder_boids:
             boid.draw(screen)
+
+        self.__builder_graph.draw(screen)
+
+        if self.__edge_start is not None:
+            node = self.__builder_graph.get_node(self.__edge_start)
+            if node:
+                pyg.draw.circle(screen, (255, 255, 0), (int(node.get_pos().x), int(node.get_pos().y)), 20, 3)
+
+
 
         # Draw buttons
         for button_id, button in self.__tool_buttons.items():
@@ -1210,7 +1380,7 @@ class BoidObject(abc.ABC):
     @abc.abstractmethod
     def step(self):
         self._vel += self._acc
-        self._pos += self._vel
+        # self._pos += self._vel
 
         self._acc = pyg.math.Vector2(0, 0)
 
@@ -1237,6 +1407,22 @@ class Boid(BoidObject):
         self._vel = pyg.math.Vector2(1, 1)
         self._reached_target = False
 
+        self.__path_behaviour = None
+        self.__next_exit = None
+    
+    def assign_path(self, graph):
+        exit_id = graph.find_nearest_node(self.get_pos(), 'exit')
+        assembly_nodes = graph.get_nodes_by_type('assembly')
+
+        assembly_id = assembly_nodes[0].get_id()
+
+        path = graph.dijkstra(exit_id, assembly_id)
+
+        if path:
+            self.__path_behaviour = PathBehaviour(path, graph)
+            self.__next_exit = exit_id
+
+
     def get_pos(self):
         return self._pos
     
@@ -1247,6 +1433,20 @@ class Boid(BoidObject):
         return self._vel
 
     def draw(self, screen):
+        if self.__path_behaviour:
+            path = self.__path_behaviour.get_path()
+            graph = self._sim.get_path_graph()
+
+            if graph and len(path) > 1:
+                points = []
+                for id in path:
+                    node = graph.get_node(id)
+                    if node:
+                        points.append((int(node.get_pos().x), int(node.get_pos().y)))
+                                      
+                if len(points) > 1:
+                    pyg.draw.lines(screen, (150, 150, 255), False, points, 1)    
+
         # Calculate points of the triangle
         phi = math.atan2(self._vel.y, self._vel.x)
         phi2 = 0.75 * math.pi
@@ -1261,6 +1461,19 @@ class Boid(BoidObject):
 
 
     def step(self):
+        current_destination = None
+        if self.__path_behaviour:
+            if not self.__path_behaviour.is_completed():
+                current_destination = self.__path_behaviour.get_current_destination()
+
+                if current_destination:
+                    distance_to_target = self.get_pos().distance_to(current_destination)
+
+                    if distance_to_target < Config.ARRIVED_RADIUS:
+                        self.__path_behaviour.advance_destination()
+                        current_destination = self.__path_behaviour.get_current_destination()
+
+        """ Remove seeking factor logic
         seeking_factor = 0
         if self._sim.get_assembly_point() is not None:
             # Check target position
@@ -1277,17 +1490,59 @@ class Boid(BoidObject):
                 seeking_factor = 0.4
             else:
                 seeking_factor = 0.8
+        """
+                
+        seeking_factor = 1.2
+        
+        if current_destination:
+            self._acc += self.__avoid_boundary() * self._sim.get_config_value("avoidance")
+            self._acc += self.__avoid_predator() * self._sim.get_config_value("avoidance")
+            self._acc += self.__separation() * self._sim.get_config_value("separation")
+            if current_destination:
+                self._acc += self.__seeking_destination(current_destination) * seeking_factor
+            self._acc += self.__alignment() * self._sim.get_config_value("alignment")
+            self._acc += self.__cohesion() * self._sim.get_config_value("cohesion")
 
-        self._acc += self.__avoid_boundary() * self._sim.get_config_value("avoidance")
-        self._acc += self.__avoid_predator() * self._sim.get_config_value("avoidance")
-        self._acc += self.__separation() * self._sim.get_config_value("separation")
-        self._acc += self.__seeking() * seeking_factor
-        self._acc += self.__alignment() * self._sim.get_config_value("alignment")
-        self._acc += self.__cohesion() * self._sim.get_config_value("cohesion")
-        super().step()
+            super().step()
 
-        # Increment positions by velocity
-        self.__move()
+            # Increment positions by velocity
+            self.__move()
+
+    def __seeking_destination(self, destination):
+        acc_request = pyg.math.Vector2(0, 0)
+
+        if destination is None:
+            return acc_request
+        
+        destination_vector = destination - self.get_pos()
+        dist = destination_vector.length()
+
+        if dist < Config.ARRIVED_RADIUS:
+            return acc_request
+
+
+        """
+        if dist < Config.ARRIVAL_SLOWING_RADIUS:
+            speed = self._max_speed * (dist / Config.ARRIVAL_SLOWING_RADIUS)
+        else:
+            speed = self._max_speed
+        """
+
+        speed = self._max_speed
+
+        # Normalise to create a direction vector
+        if destination_vector.length_squared() > 0:
+            destination_vector.normalize_ip()
+        else:
+            return acc_request
+        
+        # Scale to maximum speed value
+        acc_request = destination_vector * speed
+
+        # Subtract current velocity for steering force
+        acc_request -= self._vel
+
+        return acc_request
         
     def __move(self):
         # Ensure velocity doesn't exceed max velocity
