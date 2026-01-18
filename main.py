@@ -106,13 +106,15 @@ class PlaybackControls:
         self.__sim.step()
 
     def draw_buttons(self, screen):
+        gui_active = self.__sim.get_gui().get_active()
+
         if self.__is_running:
-            if self.__control_buttons["pause"].draw(screen):
+            if self.__control_buttons["pause"].draw(screen, gui_active):
                 self.pause()
         else:
-            if self.__control_buttons["play"].draw(screen):
+            if self.__control_buttons["play"].draw(screen, gui_active):
                 self.play()
-            if self.__control_buttons["step"].draw(screen):
+            if self.__control_buttons["step"].draw(screen, gui_active):
                 self.step()
 
 class GUI():
@@ -124,6 +126,8 @@ class GUI():
         self.__sim = sim
         self.__slider_moving = False
         self.__window = self.__sim.get_window()
+
+        self.__active_gui = False
 
         self.__slider_keys = ["protected_range", "visual_range", "separation", "alignment", "cohesion"]
 
@@ -140,6 +144,15 @@ class GUI():
                                  "cohesion": pygui.elements.UILabel(relative_rect=pyg.Rect((0,0), self.__slider_size), text=f"Cohesion: {Config.DEFAULT_COHESION_FACTOR:.2f}")}
 
         self.set_gui_layout("menu")
+
+    def get_active(self):
+        return self.__active_gui
+    
+    def enable_active_gui(self):
+        self.__active_gui = True
+
+    def disable_active_gui(self):
+        self.__active_gui = False
 
     def set_gui_layout(self, state): # TODO: Create sliders on main menu screen (see Gemini)
         for i, slider_key in enumerate(self.__slider_keys):
@@ -179,9 +192,6 @@ class GUI():
                 self.__sliders[slider_key].set_dimensions((self.__slider_size[0], self.__slider_size[1]))
                 self.__slider_labels[slider_key].set_relative_position((x, y + self.__slider_size[1] - 10))
                 self.__sliders[slider_key].set_relative_position((x, y))
-
-            elif state == "TODO":
-                pass # TODO: Hide GUI elements
     
 
     def get_slider(self, slider):
@@ -195,9 +205,6 @@ class GUI():
 
     def process_gui_event(self, event):
         self.__manager.process_events(event)
-
-        if event.type == pygui.UI_HORIZONTAL_SLIDER_MOVED:
-            pass
 
     def check_slider_moving(self):
         return self.__slider_moving
@@ -353,6 +360,9 @@ class Sim():
     def get_gui_manager(self):
         return self.__gui.get_gui_manager()
     
+    def get_gui(self):
+        return self.__gui
+    
     def set_game_state(self, state):
         if state == "menu":
             self.__current_game_state = GameState.MENU
@@ -371,10 +381,14 @@ class Sim():
     # Event handler
     def handle_events(self, gui):
             for event in pyg.event.get():
+                active_gui = gui.get_active()
 
                 # Check for program killed
                 if event.type == pyg.QUIT:
                     self.__running = False
+
+                if event.type == pyg.MOUSEBUTTONDOWN:
+                    pass
 
                 if self.__current_game_state == GameState.SIMULATION:
                     # Check left mouse button pressed
@@ -384,10 +398,11 @@ class Sim():
 
                 if self.__current_game_state == GameState.MAP_BUILDER:
                     if event.type == pyg.MOUSEBUTTONDOWN:
+
                         mouse_pos = pyg.mouse.get_pos()
 
                         for tool_id, button in self.__map_builder.get_tool_buttons().items():
-                            if button.draw(self.__screen):
+                            if button.draw(self.__screen, active_gui):
                                 self.__map_builder.tool_click(tool_id)
                                 return
 
@@ -399,10 +414,15 @@ class Sim():
                         self.__map_builder.handle_image(event.text)
                     elif event.ui_object_id == "#load_map_dialog":
                         self.__menu.handle_load_path(event.text)
-                    
+
+                elif event.type == pygui.UI_WINDOW_CLOSE:
+                    gui.disable_active_gui()
 
                 # Check for keypresses to place objects
                 if event.type == pyg.KEYDOWN:
+                    if active_gui:
+                        gui.process_gui_event(event)
+                        continue
 
                     if event.key == pyg.K_SPACE:
                         self.set_game_state("menu")
@@ -776,14 +796,13 @@ class Menu():
             self.__open_load_dialog()
             # Show file selector
             
-            
         elif button_id == "title":
             pass
         else:
             print("Button ID not matched")
 
     def __open_load_dialog(self):
-        if self.__load_dialog is not None:
+        if self.__load_dialog is not None and self.__load_dialog.alive():
             self.__load_dialog.kill()
 
         gui_manager = self.__sim.get_gui_manager()
@@ -792,6 +811,7 @@ class Menu():
 
         maps_path = os.path.join(os.getcwd(), Config.MAPS_FOLDER)
 
+        self.__sim.get_gui().enable_active_gui()
         self.__load_dialog = pygui.windows.ui_file_dialog.UIFileDialog(
             rect=dialog_rect,
             manager=gui_manager,
@@ -818,17 +838,22 @@ class Menu():
             json_manager = JSONManager(self.__sim)
             json_manager.import_map(data)
             self.__sim.map_loaded()
+            self.__sim.get_gui().disable_active_gui()
             self.__sim.set_game_state("map_builder")
 
         else:
             print(f"Load failed with: {error}")
 
+        self.__sim.get_gui().disable_active_gui()
+
     def render_menu(self, screen):
         screen.fill(Config.SCREEN_COLOUR)
 
+        gui_active = self.__sim.get_gui().get_active()
+
         # Draw all buttons
         for button_id, button in self.__buttons_dict.items():
-            if button.draw(screen):
+            if button.draw(screen, gui_active):
                 self.__button_action(button_id)
 
 class Button():
@@ -850,17 +875,19 @@ class Button():
     def set_selected(self, selected):
         self.__image = self.__selected_img if selected else self.__normal_img
 
-    def draw(self, surface):
+    def draw(self, surface, disabled=False):
         action = False
-        mouse_pos = pyg.mouse.get_pos()
 
-        if self.__rect.collidepoint(mouse_pos):
-            if pyg.mouse.get_pressed()[0] == 1 and self.__clicked == False:
-                self.__clicked = True
-                action = True
+        if not disabled:
+            mouse_pos = pyg.mouse.get_pos()
 
-        if pyg.mouse.get_pressed()[0] == 0:
-            self.__clicked = False
+            if self.__rect.collidepoint(mouse_pos):
+                if pyg.mouse.get_pressed()[0] == 1 and self.__clicked == False:
+                    self.__clicked = True
+                    action = True
+
+            if pyg.mouse.get_pressed()[0] == 0:
+                self.__clicked = False
 
         surface.blit(self.__image, (self.__rect.x, self.__rect.y))
         return action
@@ -1014,6 +1041,7 @@ class MapBuilder():
             self.__save_dialog.kill()
 
         gui_manager = self.__sim.get_gui_manager()
+        self.__sim.get_gui().enable_active_gui()
 
         dialog_rect = pyg.Rect((Config.SCREEN_WIDTH // 2 + 208, Config.SCREEN_HEIGHT - 78), Config.SAVE_DIALOG_SIZE)
         self.__save_dialog = pygui.elements.UITextEntryLine(relative_rect=dialog_rect, manager=gui_manager, object_id="#save_file_path")
@@ -1043,6 +1071,7 @@ class MapBuilder():
         success, error = self.__jsonmanager.save_map(path, self.__builder_boundaries, self.__builder_assembly, self.__builder_boids, self.__tracing_img_path, graph)
 
         self.__save_dialog.kill()
+        self.__sim.get_gui().disable_active_gui()
 
         if success:
             self.__sim.set_game_state('menu')
@@ -1052,8 +1081,11 @@ class MapBuilder():
 
     def __import_image(self):
         self.__file_manager.create_file_explorer()
+        
 
     def handle_image(self, path):
+        self.__sim.get_gui().disable_active_gui()
+
         if path:
             self.__tracing_img_path = path
             try:
@@ -1099,26 +1131,27 @@ class MapBuilder():
         # TODO: Add filter over image for 'tracing paper' effect
 
     def handle_click(self, pos, button):
-        if self.__current_tool == "wall":
-            self.__use_wall_tool(pos, button)
+        if self.__sim.get_gui().get_active() is False:
+            if self.__current_tool == "wall":
+                self.__use_wall_tool(pos, button)
 
-        elif self.__current_tool == "assembly":
-            self.__use_assembly_tool(pos)
+            elif self.__current_tool == "assembly":
+                self.__use_assembly_tool(pos)
 
-        elif self.__current_tool == "exit":
-            self.__use_exit_tool(pos)
+            elif self.__current_tool == "exit":
+                self.__use_exit_tool(pos)
 
-        elif self.__current_tool == "destination":
-            self.__use_destination_tool(pos)
+            elif self.__current_tool == "destination":
+                self.__use_destination_tool(pos)
 
-        elif self.__current_tool == "edge":
-            self.__use_edge_tool()
+            elif self.__current_tool == "edge":
+                self.__use_edge_tool()
 
-        elif self.__current_tool == "boid":
-            self.__use_boid_tool(pos)
+            elif self.__current_tool == "boid":
+                self.__use_boid_tool(pos)
 
-        elif self.__current_tool == "eraser":
-            self.__use_erase_tool(pos)
+            elif self.__current_tool == "eraser":
+                self.__use_erase_tool(pos)
 
     def __use_wall_tool(self, pos, button):
         if button == 1:
@@ -1239,6 +1272,8 @@ class MapBuilder():
     def render_builder(self, screen):
         screen.fill(Config.SCREEN_COLOUR)
 
+        gui_active = self.__sim.get_gui().get_active()
+
         # Render image to trace
         if self.__tracing_img:
             img_rect = self.__tracing_img.get_rect(center=(Config.SCREEN_WIDTH // 2 + 60, Config.SCREEN_HEIGHT // 2))
@@ -1264,11 +1299,11 @@ class MapBuilder():
         # Draw buttons
         for button_id, button in self.__tool_buttons.items():
             button.set_selected(button_id == self.__current_tool)
-            if button.draw(screen):
+            if button.draw(screen, gui_active):
                 self.tool_click(button_id)
 
         for button_id, button in self.__confirm_buttons.items():
-            if button.draw(screen):
+            if button.draw(screen, gui_active):
                 self.confirm_click(button_id)
 
     def get_tool_buttons(self):
@@ -1295,6 +1330,7 @@ class FileManager():
         file_rect = pyg.Rect((260, 215), (600, 380))
         file_explorer = pygui.windows.ui_file_dialog.UIFileDialog(rect=file_rect, manager=gui_manager, window_title="Choose a map image", initial_file_path=".", allowed_suffixes={'.png', '.jpeg ', '.jpg'}, object_id="#file_explorer")
         file_explorer.resizable = False
+        self.__sim.get_gui().enable_active_gui()
 
         return None
 
