@@ -1005,16 +1005,12 @@ class MapBuilder():
                 self.__sim.set_game_state("menu")
                 return
             
-            # TODO: Save graph JSON
-            
             if self.__save_dialog is None:
                 self.__open_save_dialog()
                 return
 
             file_input = self.__save_dialog.get_text().strip()
             self.__handle_save_path(file_input)
-
-        
 
         elif id == "cancel":
             self.reset()
@@ -1303,7 +1299,7 @@ class MapBuilder():
                 self.tool_click(button_id)
 
         for button_id, button in self.__confirm_buttons.items():
-            if button.draw(screen, gui_active):
+            if button.draw(screen):
                 self.confirm_click(button_id)
 
     def get_tool_buttons(self):
