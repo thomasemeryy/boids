@@ -278,6 +278,9 @@ class Sim():
 
     def map_unloaded(self):
         self.__map_loaded = False
+
+    def import_graph(self, graph):
+        self.__path_graph.load_json(graph)
     
     def create_boid_container(self, lst, json=False):
         if json:
@@ -338,11 +341,13 @@ class Sim():
         self.create_boid_container(boids)
         self.create_assembly_point(assembly)
 
-    def import_objects_to_builder(self, boundaries, assembly, boids, img_path):
+    def import_objects_to_builder(self, boundaries, assembly, boids, graph, img_path):
         self.__map_builder.reset()
         self.create_boundary_container(boundaries, True)
         self.create_boid_container(boids, True)
         self.create_assembly_point(assembly, True)
+        if graph:
+            self.__map_builder.get_builder_graph().load_json(graph)
         self.__map_builder.handle_image(img_path)
     
     def get_gui_manager(self):
@@ -666,7 +671,35 @@ class PathGraph:
         self.__adjacency_list.clear()
         self.__next_id = 0
 
-    # Add to dict and from dict functions here for JSON capabilities
+    def to_json(self):
+        json_dict = {
+            "nodes": [{"id": node.get_id(), "pos": (node.get_pos().x, node.get_pos().y), "type": node.get_type()} for node in self.__nodes.values()],
+            "edges": [{"start": node_id, "end": neighbour_id, "distance": distance} for node_id, neighbours in self.__adjacency_list.items() for neighbour_id, distance in neighbours.items()],
+        }
+
+        return json_dict
+
+    def load_json(self, data):
+        self.clear()
+
+        node_map = {}
+        for node_data in data["nodes"]:
+            id = self.add_node(pyg.math.Vector2(node_data["pos"]), node_data["type"])
+            node_map[node_data['id']] = id
+        
+        edges_done = []
+        for edge_data in data["edges"]:
+            old_start = edge_data["start"]
+            old_end = edge_data["end"]
+
+            start = node_map.get(old_start)
+            end = node_map.get(old_end)
+
+            edge_key = (min(start, end), max(start, end))
+            if edge_key not in edges_done:
+                self.add_edge(start, end, True)
+                edges_done.append(edge_key)
+
 
 class PathBehaviour:
     def __init__(self, path, graph):
@@ -852,7 +885,6 @@ class MapBuilder():
         self.__wall_start = None
 
         # Edge drawing
-        self.__edge_mode = False
         self.__edge_start = None
 
         # UI buttons?
@@ -879,7 +911,6 @@ class MapBuilder():
         self.__drawing_wall = False
         self.__wall_start = None
 
-        self.__edge_mode = False
         self.__edge_start = None
 
         self.__save_dialog = None
@@ -1006,7 +1037,10 @@ class MapBuilder():
             
         path = os.path.join(maps_dir, path)
             
-        success, error = self.__jsonmanager.save_map(path, self.__builder_boundaries, self.__builder_assembly, self.__builder_boids, self.__tracing_img_path)
+        graph = self.__builder_graph.to_json()
+        self.__sim.import_graph(graph)
+
+        success, error = self.__jsonmanager.save_map(path, self.__builder_boundaries, self.__builder_assembly, self.__builder_boids, self.__tracing_img_path, graph)
 
         self.__save_dialog.kill()
 
@@ -1269,7 +1303,7 @@ class JSONManager():
         self.__sim = sim
 
     @staticmethod
-    def save_map(path, boundaries, assembly, boids, img_path=None):
+    def save_map(path, boundaries, assembly, boids, img_path=None, graph=None):
         try:
             if not path.lower().endswith('.json'):
                 path += '.json'
@@ -1283,7 +1317,8 @@ class JSONManager():
                     "y": int(assembly.get_pos()[1]),
                 },
                 "boundaries": [],
-                "boids": []
+                "boids": [], 
+                "path_graph": graph if graph else None
             }
 
             # Add boundaries to JSON
@@ -1343,6 +1378,7 @@ class JSONManager():
                 "boundaries": [],
                 "assembly_point": None,
                 "boids": [],
+                "path_graph": map_data.get("path_graph", None),
                 "map_image": map_data.get("map_image", None)
             }
 
@@ -1373,14 +1409,22 @@ class JSONManager():
         
     @staticmethod
     def __validate_data(data):
+        required_fields = ["assembly_point", "boundaries", "boids", "path_graph"]
+        
+        for field in required_fields:
+            if field not in data:
+                return (False, f"Missing required field: {field}")
+
         return (True, None)
     
     def import_map(self, data):
         boundaries = data["boundaries"]
         assembly = data["assembly_point"]
         boids = data["boids"]
+        graph = data["path_graph"]
         tracing_image = data["map_image"]
-        self.__sim.import_objects_to_builder(boundaries,  assembly, boids, tracing_image)
+        self.__sim.import_objects_to_builder(boundaries, assembly, boids, graph, tracing_image)
+            
 
 # Abstract class so it cannot be instantiated
 class BoidObject(abc.ABC):
@@ -1422,7 +1466,6 @@ class Boid(BoidObject):
         self._reached_target = False
 
         self.__path_behaviour = None
-        self.__next_exit = None
     
     def assign_path(self, graph):
         exit_id = graph.find_nearest_node(self.get_pos(), 'exit')
@@ -1434,7 +1477,6 @@ class Boid(BoidObject):
 
         if path:
             self.__path_behaviour = PathBehaviour(path, graph)
-            self.__next_exit = exit_id
 
 
     def get_pos(self):
