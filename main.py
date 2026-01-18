@@ -47,6 +47,7 @@ class Config:
     ARRIVED_RADIUS = 5
     MAX_SPEED = 1
     MAX_ACC_REQUEST = 0.15
+    GRAPH_EDGE_RADIUS = 150
 
     # Menu layout
     MOUSE_BOUNDARY_MARGIN = 90
@@ -152,7 +153,7 @@ class GUI():
                         x += (self.__slider_size[0] + 20 + 10)
 
                     self.__sliders[slider_key].set_dimensions((self.__slider_size[0] + 20, self.__slider_size[1] + 20))
-                else:
+                else: 
                     x = (Config.SCREEN_WIDTH // 2) + 50
                     y = Config.MENU_CONTROLS_Y + (2 * Config.MENU_CONTROLS_MARGIN) - 5
 
@@ -551,7 +552,7 @@ class PathGraph:
 
         return id
 
-    def add_edge(self, id_a, id_b):
+    def add_edge(self, id_a, id_b, bi = True):
         if id_a not in self.__nodes or id_b not in self.__nodes:
             return
         
@@ -562,6 +563,10 @@ class PathGraph:
 
         self.__adjacency_list[id_a][id_b] = distance
         node_a.add_neighbour(id_b, distance)
+
+        if bi:
+            self.__adjacency_list[id_b][id_b] = distance
+            node_b.add_neighbour(id_a, distance)
 
     def remove_node(self, id):
         if id in self.__nodes:
@@ -971,7 +976,7 @@ class MapBuilder():
             for neighbour_id in neighbours.keys():
                 new_id = node_map[id]
                 new_neighbour_id = node_map[neighbour_id]
-                sim_graph.add_edge(new_id, new_neighbour_id)
+                sim_graph.add_edge(new_id, new_neighbour_id, True)
 
     def __open_save_dialog(self):
         if self.__save_dialog is not None:
@@ -1073,7 +1078,7 @@ class MapBuilder():
             self.__use_destination_tool(pos)
 
         elif self.__current_tool == "edge":
-            self.__use_edge_tool(pos)
+            self.__use_edge_tool()
 
         elif self.__current_tool == "boid":
             self.__use_boid_tool(pos)
@@ -1126,7 +1131,8 @@ class MapBuilder():
     def __use_destination_tool(self, pos):
         id = self.__builder_graph.add_node(pos, 'destination')
 
-    def __use_edge_tool(self, pos):
+    def __use_edge_tool(self):
+        """
         clicked_id = self.__find_node_at_pos(pos, 20)
 
         if clicked_id is None:
@@ -1138,9 +1144,19 @@ class MapBuilder():
 
         else:
             if self.__edge_start != clicked_id:
-                self.__builder_graph.add_edge(self.__edge_start, clicked_id)
+                self.__builder_graph.add_edge(self.__edge_start, clicked_id, True)
 
             self.__edge_start = None
+        """
+
+        all_nodes = self.__builder_graph.get_all_nodes().items()
+        for id_a, node_a in all_nodes:
+            for id_b, node_b in all_nodes:
+                if node_a != node_b:
+                    if node_a.get_pos().distance_to(node_b.get_pos()) < Config.GRAPH_EDGE_RADIUS:
+                        if Helper.clear_path(node_a, node_b, self.__builder_boundaries):
+                            self.__builder_graph.add_edge(id_a, id_b, True)
+
 
     def __find_node_at_pos(self, pos, radius):
         pos_vector = pyg.math.Vector2(pos)
@@ -1210,8 +1226,6 @@ class MapBuilder():
             node = self.__builder_graph.get_node(self.__edge_start)
             if node:
                 pyg.draw.circle(screen, (255, 255, 0), (int(node.get_pos().x), int(node.get_pos().y)), 20, 3)
-
-
 
         # Draw buttons
         for button_id, button in self.__tool_buttons.items():
@@ -1849,7 +1863,7 @@ class Boundary():
             line_start = self.__expanded_points[i]
             line_end = self.__expanded_points[(i + 1) % 4]
 
-            intersect = self.__lines_intersect(current_pos, next_pos, line_start, line_end)
+            intersect = Helper.lines_intersect(current_pos, next_pos, line_start, line_end)
 
             if intersect is not None:
                 distance = boid.get_pos().distance_squared_to(intersect)
@@ -1859,12 +1873,23 @@ class Boundary():
 
         # Check whether the boid path for the next frame intersects a line 
         return (closest_point is not None, closest_point)
-    
-    def __lines_intersect(self, p1, p2, p3, p4):
-        # Check boundary has been expanded
-        if len(self.__expanded_points) != 4:
-            return (False, None)
-        
+
+class AssemblyPoint():
+    def __init__(self, pos):
+        self.__pos = pos
+
+    def get_pos(self):
+        return self.__pos
+
+    def draw(self, screen):
+        pyg.draw.circle(screen, Config.ASSEMBLY_COLOUR, self.__pos, Config.ASSEMBLY_SIZE)
+
+class Helper():
+    def __init__(self):
+        pass
+
+    @staticmethod
+    def lines_intersect(p1, p2, p3, p4):
         # P1/P2 = projected motion
         # P3/P4 = boundary edge
 
@@ -1883,16 +1908,16 @@ class Boundary():
 
         if 0 < t < 1 and 0 < u < 1:
             return pyg.Vector2(x1 + t * (x2 - x1), y1 + t * (y2 - y1))
-
-class AssemblyPoint():
-    def __init__(self, pos):
-        self.__pos = pos
-
-    def get_pos(self):
-        return self.__pos
-
-    def draw(self, screen):
-        pyg.draw.circle(screen, Config.ASSEMBLY_COLOUR, self.__pos, Config.ASSEMBLY_SIZE)
+        
+    @staticmethod
+    def clear_path(node_a, node_b, walls):
+        for wall in walls:
+            if Helper.lines_intersect(node_a.get_pos(), node_b.get_pos(), wall.get_pos()[0], wall.get_pos()[1]) is not None:
+                print("Lines intersect")
+                return False
+            
+        return True
+            
 
 if __name__ == '__main__':
     sim = Sim()
