@@ -25,18 +25,16 @@ class Config:
     NUMBER_OF_BOIDS = 150
     GENERATION_MARGIN = 12 # The larger the number, the smaller the margin
     BOID_SIZE = 5
-    PREDATOR_SIZE = 10
     ASSEMBLY_SIZE = 25
     BOUNDARY_THICKNESS = 3
     BOUNDARY_RADIUS = 20
     BOID_COLOUR = (255, 255, 255)
-    PREDATOR_COLOUR = (255, 0, 0)
+    BOUNDARY_COLOUR = (255, 0, 0)
     ASSEMBLY_COLOUR = (255, 255, 0)
     EXIT_COLOUR = (0, 255, 0)
     DESTINATION_COLOUR = (0, 150, 255)
     DEFAULT_VISUAL_RANGE = 100
     DEFAULT_PROTECTED_RANGE = 20
-    DEFAULT_PREDATOR_RANGE = 30
     DEFAULT_BOUNDARY_RANGE = 5
     DEFAULT_SEPARATION_FACTOR = 2
     DEFAULT_SEEKING_FACTOR = 0.3
@@ -237,7 +235,6 @@ class Sim:
 
         self.__config_values = {"visual_range": Config.DEFAULT_VISUAL_RANGE, 
                                "protected_range": Config.DEFAULT_PROTECTED_RANGE,
-                               "predator_range": Config.DEFAULT_PREDATOR_RANGE,
                                "boundary_range": Config.DEFAULT_BOUNDARY_RANGE,
                                "separation": Config.DEFAULT_SEPARATION_FACTOR,
                                "seeking": Config.DEFAULT_SEEKING_FACTOR,
@@ -248,14 +245,12 @@ class Sim:
         # Title window
         pyg.display.set_caption("Boids Simulation")
 
-        # TODO: add window icon here
+        window_icon = pyg.image.load(f"{Config.IMAGES_FOLDER}/window_icon.png")
+        pyg.display.set_icon(window_icon)
 
         # Instantiate a container full of boids
         # self.__boid_container = [Boid(self) for _ in range(Config.NUMBER_OF_BOIDS)]
         self.__boid_container = []
-
-        # Create predator container
-        self.__predator_container = []
 
         # Create boundary containers
         self.__boundary_container = []
@@ -300,9 +295,6 @@ class Sim:
             for boid in lst:
                 self.__boid_container.append(boid)
     
-    def get_predator_container(self):
-        return self.__predator_container
-    
     def get_boundary_container(self):
         return self.__boundary_container
     
@@ -322,7 +314,6 @@ class Sim:
     def reset_simulation(self):
         self.__boid_container = []
         self.__boundary_container = []
-        self.__predator_container = []
         self.__assembly_point = None
         self.__path_graph.clear()
 
@@ -392,7 +383,7 @@ class Sim:
                     # Check left mouse button pressed
                     if pyg.mouse.get_pressed()[0]:
                         if self.mouse_in_boundary():
-                            self.__predator_container.append(Predator(self, pyg.mouse.get_pos()))
+                            pass # TODO: Add boid on click?
 
                 if self.__current_game_state == GameState.MAP_BUILDER:
                     if event.type == pyg.MOUSEBUTTONDOWN:
@@ -456,9 +447,6 @@ class Sim:
 
         for boid in self.__boid_container:
             boid.draw(self.__screen)
-
-        for predator in self.__predator_container:
-            predator.draw(self.__screen)
 
         for boundary in self.__boundary_container:
             boundary.draw(self.__screen)
@@ -1108,8 +1096,6 @@ class MapBuilder:
 
         return traced_img
 
-        # TODO: Add filter over image for 'tracing paper' effect
-
     def handle_click(self, pos, button):
         if self.__sim.get_gui().get_active() is False:
             if self.__current_tool == "wall":
@@ -1566,7 +1552,6 @@ class Boid(BoidObject):
         
         if current_destination:
             self._acc += self.__avoid_boundary() * self._sim.get_config_value("avoidance")
-            self._acc += self.__avoid_predator() * self._sim.get_config_value("avoidance")
             self._acc += self.__separation() * self._sim.get_config_value("separation")
             if current_destination:
                 self._acc += self.__seeking_destination(current_destination) * seeking_factor
@@ -1620,22 +1605,6 @@ class Boid(BoidObject):
             self._vel.scale_to_length(Config.MAX_SPEED)
 
         self.set_pos(self.get_pos() + self._vel)
-
-    def __avoid_predator(self):
-        acc_request = pyg.math.Vector2(0, 0)
-        nearby_predators = self.__predators_in_radius(self._sim.get_config_value("predator_range"))
-
-        if len(nearby_predators) == 0:
-            return acc_request
-        
-        for predator in nearby_predators:
-            try:
-                dist_delta = self.get_pos() - predator.get_pos()
-                acc_request += (dist_delta) * (self._sim.get_config_value("predator_range") / self.get_pos().distance_to(predator.get_pos()))
-            except ZeroDivisionError:
-                return acc_request
-            
-        return self.__limit_force(acc_request, nearby_predators)
     
     def __avoid_boundary(self):
         acc_request = pyg.math.Vector2(0, 0)
@@ -1766,14 +1735,6 @@ class Boid(BoidObject):
             
         return boids_present
     
-    def __predators_in_radius(self, radius):
-        predators_present = []
-        for potential_predator in self._sim.get_predator_container():
-          if self.get_pos().distance_to(potential_predator.get_pos()) < radius:
-                    predators_present.append(potential_predator)
-            
-        return predators_present
-    
     def __boundaries_in_radius(self):
         boundaries_present = []
         for boundary in self._sim.get_boundary_container():
@@ -1809,19 +1770,6 @@ class Boid(BoidObject):
         
         return force
 
-class Predator(BoidObject):
-    def __init__(self, sim, pos):
-        super().__init__(sim, pos)
-
-    def draw(self, screen):
-        pyg.draw.circle(screen, Config.PREDATOR_COLOUR, self.get_pos(), Config.PREDATOR_SIZE)
-
-    def step(self):
-        pass
-
-    def get_pos(self):
-        return self._pos
-
 class BoundaryManager():
     def __init__(self, sim):
         self.__current_start_pos = None
@@ -1844,7 +1792,7 @@ class Boundary:
         self.expand(Config.BOUNDARY_RADIUS)
         
     def draw(self, screen):
-        self.__rect = pyg.draw.line(screen, Config.PREDATOR_COLOUR, self.__pos[0], self.__pos[1], Config.BOUNDARY_THICKNESS)
+        self.__rect = pyg.draw.line(screen, Config.BOUNDARY_COLOUR, self.__pos[0], self.__pos[1], Config.BOUNDARY_THICKNESS)
 
     def draw_expanded(self, screen):
         pyg.draw.polygon(screen, Config.BOID_COLOUR, self.__expanded_points, 1)
