@@ -117,7 +117,7 @@ class PlaybackControls:
             if self.__control_buttons["step"].draw(screen, gui_active):
                 self.step()
 
-class GUI():
+class GUI:
     def __init__(self, sim):
         self.__manager = pygui.UIManager((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
         self.__gui_margin = (10, 20)
@@ -218,7 +218,7 @@ class GUI():
     def get_gui_manager(self):
         return self.__manager
 
-class Sim():
+class Sim:
     def __init__(self):
         pyg.init()
         self.__current_game_state = GameState.MENU
@@ -559,8 +559,6 @@ class PathNode:
         else:
             pyg.draw.circle(screen, Config.ASSEMBLY_COLOUR, (int(self.__pos.x), int(self.__pos.y)), 25)
 
-
-
 class PathGraph:
     def __init__(self):
         self.__nodes = {}
@@ -720,7 +718,6 @@ class PathGraph:
                 self.add_edge(start, end, True)
                 edges_done.append(edge_key)
 
-
 class PathBehaviour:
     def __init__(self, path, graph):
         self.__path = path
@@ -752,10 +749,8 @@ class PathBehaviour:
     
     def get_path(self):
         return self.__path
-    
-     
 
-class Menu():
+class Menu:
     def __init__(self, sim):
         self.__sim = sim
         self.__buttons_dict = {}
@@ -856,7 +851,7 @@ class Menu():
             if button.draw(screen, gui_active):
                 self.__button_action(button_id)
 
-class Button():
+class Button:
     def __init__(self, x, y, normal_path, scale, selected_path=None):
         self.__normal_img = self.__load_img(normal_path, scale)
         self.__selected_img = self.__load_img(selected_path, scale) if selected_path else self.__normal_img
@@ -892,7 +887,7 @@ class Button():
         surface.blit(self.__image, (self.__rect.x, self.__rect.y))
         return action
 
-class MapBuilder():
+class MapBuilder:
     def __init__(self, sim):
         self.__sim = sim
         self.__jsonmanager = JSONManager(sim)
@@ -1317,7 +1312,7 @@ class MapBuilder():
     def set_tracing_image(self, img):
         self.__tracing_img = img
 
-class FileManager():
+class FileManager:
     def __init__(self, sim):
         self.__sim = sim
 
@@ -1330,7 +1325,7 @@ class FileManager():
 
         return None
 
-class JSONManager():
+class JSONManager:
     def __init__(self, sim):
         self.__sim = sim
 
@@ -1457,8 +1452,6 @@ class JSONManager():
         tracing_image = data["map_image"]
         self.__sim.import_objects_to_builder(boundaries, assembly, boids, graph, tracing_image)
             
-
-# Abstract class so it cannot be instantiated
 class BoidObject(abc.ABC):
     def __init__(self, sim, pos):
         self._sim = sim
@@ -1854,7 +1847,7 @@ class BoundaryManager():
     def clear_start_pos(self):
         self.__current_start_pos = None
 
-class Boundary():
+class Boundary:
     def __init__(self, pos):
         self.__pos = pos
         self.__expanded_points = []
@@ -1948,7 +1941,7 @@ class Boundary():
         # Check whether the boid path for the next frame intersects a line 
         return (closest_point is not None, closest_point)
 
-class AssemblyPoint():
+class AssemblyPoint:
     def __init__(self, pos):
         self.__pos = pos
 
@@ -1958,7 +1951,7 @@ class AssemblyPoint():
     def draw(self, screen):
         pyg.draw.circle(screen, Config.ASSEMBLY_COLOUR, self.__pos, Config.ASSEMBLY_SIZE)
 
-class Helper():
+class Helper:
     def __init__(self):
         pass
 
@@ -1992,7 +1985,6 @@ class Helper():
             
         return True
             
-
 if __name__ == '__main__':
     sim = Sim()
     sim.run()
