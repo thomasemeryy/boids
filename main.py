@@ -154,7 +154,7 @@ class GUI:
     def disable_active_gui(self):
         self.__active_gui = False
 
-    def set_gui_layout(self, state): # TODO: Create sliders on main menu screen (see Gemini)
+    def set_gui_layout(self, state):
         for i, slider_key in enumerate(self.__slider_keys):
             
             if state == "menu":
@@ -265,8 +265,6 @@ class Sim:
     
     def get_path_graph(self):
         return self.__path_graph
-    
-    # TODO: Add import graph function from JSON
     
     def get_map_builder(self):
         return self.__map_builder
@@ -456,8 +454,6 @@ class Sim:
         # Wipe last screen
         self.__screen.fill(Config.SCREEN_COLOUR)
 
-        self.create_grids()
-
         for boid in self.__boid_container:
             boid.draw(self.__screen)
 
@@ -472,13 +468,6 @@ class Sim:
             self.__assembly_point.draw(self.__screen)
 
         self.__path_graph.draw(self.__screen)
-
-    def create_grids(self): # TODO: Unfinished - use for spacial hashing
-        self.standard_grid_dimensions = (Config.SCREEN_WIDTH // Config.NUMBER_OF_GRIDS_WIDE, Config.SCREEN_HEIGHT // Config.NUMBER_OF_GRIDS_HIGH)
-
-        self.vertical_edge_grid_dimensions = (Config.SCREEN_WIDTH % (self.standard_grid_dimensions[0]), self.standard_grid_dimensions[1])
-        self.horizontal_edge_grid_dimensions = (self.standard_grid_dimensions[0], Config.SCREEN_HEIGHT % (self.standard_grid_dimensions[1]))
-        self.corner_grid_dimensions = ()
 
     def update_gui_values(self, gui):
         # Add values from sliders to simulation instance
