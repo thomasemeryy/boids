@@ -219,19 +219,28 @@ class GUI:
 class Sim:
     def __init__(self):
         pyg.init()
+
+        # Map state controls
         self.__current_game_state = GameState.MENU
         self.__running = False
+        self.__map_loaded = False
+
+        # Window / sim variables
         self.__screen = pyg.display.set_mode((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
         self.__window = self.__screen.get_rect()
         self.__clock = pyg.time.Clock()
         self.__gui = GUI(self)
+
+        # Composite objects
         self.__menu = Menu(self)
         self.__map_builder = MapBuilder(self)
-        self.__boundary_manager = BoundaryManager(self)
         self.__playback_controls = PlaybackControls(self)
-        self.__assembly_point = None
-        self.__map_loaded = False
         self.__path_graph = PathGraph()
+
+        # Instantiate object containers
+        self.__assembly_point = None
+        self.__boid_container = []
+        self.__boundary_container = []
 
         self.__config_values = {"visual_range": Config.DEFAULT_VISUAL_RANGE, 
                                "protected_range": Config.DEFAULT_PROTECTED_RANGE,
@@ -242,95 +251,13 @@ class Sim:
                                "cohesion": Config.DEFAULT_COHESION_FACTOR,
                                "avoidance": Config.DEFAULT_AVOIDANCE_FACTOR}
 
-        # Title window
+        # Title and icon
         pyg.display.set_caption("Boids Simulation")
-
-        window_icon = pyg.image.load(f"{Config.IMAGES_FOLDER}/window_icon.png")
-        pyg.display.set_icon(window_icon)
-
-        # Instantiate a container full of boids
-        # self.__boid_container = [Boid(self) for _ in range(Config.NUMBER_OF_BOIDS)]
-        self.__boid_container = []
-
-        # Create boundary containers
-        self.__boundary_container = []
-
-    def get_config_value(self, type):
-        return self.__config_values[type]
-    
-    def get_path_graph(self):
-        return self.__path_graph
-    
-    def get_map_builder(self):
-        return self.__map_builder
-
-    def get_window(self):
-        return self.__window
-    
-    def get_boid_container(self):
-        return self.__boid_container
-    
-    def is_map_loaded(self):
-        return self.__map_loaded
-    
-    def map_loaded(self):
-        self.__map_loaded = True
-
-    def map_unloaded(self):
-        self.__map_loaded = False
+        pyg.display.set_icon(pyg.image.load(f"{Config.IMAGES_FOLDER}/window_icon.png"))
 
     def import_graph(self, graph):
         self.__path_graph.load_json(graph)
     
-    def create_boid_container(self, lst, json=False):
-        if json:
-            boids = []
-            for pos in lst:
-                boid = Boid(self)
-                boid.set_pos(pyg.math.Vector2(pos))
-                boids.append(boid)
-            self.__map_builder.set_boids(boids)
-
-        else:
-            for boid in lst:
-                self.__boid_container.append(boid)
-    
-    def get_boundary_container(self):
-        return self.__boundary_container
-    
-    def create_boundary_container(self, lst, json=False):
-        if json:
-            boundaries = []
-            for pos in lst:
-                boundaries.append(Boundary((pyg.math.Vector2(pos[0]), pyg.math.Vector2(pos[1]))))
-            self.__map_builder.set_boundaries(boundaries)
-        else:
-            for boundary in lst:
-                self.__boundary_container.append(boundary)
-    
-    def get_assembly_point(self):
-        return self.__assembly_point
-
-    def reset_simulation(self):
-        self.__boid_container = []
-        self.__boundary_container = []
-        self.__assembly_point = None
-        self.__path_graph.clear()
-
-    def enable_pathfinding(self):
-        graph = self.__path_graph
-
-        for boid in self.__boid_container:
-            boid.assign_path(graph)
-
-    
-    def create_assembly_point(self, point, json=False):
-        if json:
-            self.__map_builder.set_assembly(AssemblyPoint(pyg.math.Vector2(point)))
-        else:
-            self.__assembly_point = point
-            self.__map_builder.get_builder_graph().add_node(pyg.math.Vector2(point.get_pos()), 'assembly')
-
     def import_objects_to_sim(self, boundaries, assembly, boids):
         self.reset_simulation()
         self.create_boundary_container(boundaries)
@@ -345,29 +272,45 @@ class Sim:
         if graph:
             self.__map_builder.get_builder_graph().load_json(graph)
         self.__map_builder.handle_image(img_path)
-    
-    def get_gui_manager(self):
-        return self.__gui.get_gui_manager()
-    
-    def get_gui(self):
-        return self.__gui
-    
-    def set_game_state(self, state):
-        if state == "menu":
-            self.__current_game_state = GameState.MENU
-            self.__gui.set_gui_layout("menu")
-        elif state == "map_builder":
-            self.__current_game_state = GameState.MAP_BUILDER
-            self.__gui.set_gui_layout("map_builder")
-            # Clear previous maps by calling reset function
-        elif state == "simulation":
-            # Get data from map builder - boundaries, assembly point and boids
-            self.__current_game_state = GameState.SIMULATION
-            self.__gui.set_gui_layout("game")
-        else:
-            pass
 
-    # Event handler
+    def reset_simulation(self):
+        self.__boid_container = []
+        self.__boundary_container = []
+        self.__assembly_point = None
+        self.__path_graph.clear()
+
+    def enable_pathfinding(self):
+        graph = self.__path_graph
+
+        for boid in self.__boid_container:
+            boid.assign_path(graph)
+
+    def mouse_in_boundary(self): 
+        # Check mouse position does not exceed screen boundaries and does not fall in forbidden GUI zone
+        mpos = pyg.mouse.get_pos()
+        if mpos[1] < Config.MOUSE_BOUNDARY_MARGIN:
+            return False
+        elif mpos[0] == 0 or mpos[0] >= (Config.SCREEN_WIDTH - 1):
+            return False
+        elif mpos[1] >= (Config.SCREEN_HEIGHT - 1):
+            return False
+        
+        return True
+  
+    def update_gui_values(self, gui):
+        # Add values from sliders to simulation instance
+        self.__config_values["protected_range"] = gui.get_slider("protected_range").get_current_value()
+        self.__config_values["visual_range"] = gui.get_slider("visual_range").get_current_value()
+        self.__config_values["separation"] = gui.get_slider("separation").get_current_value()
+        self.__config_values["alignment"] = gui.get_slider("alignment").get_current_value()
+        self.__config_values["cohesion"] = gui.get_slider("cohesion").get_current_value()
+
+        gui.get_slider_label("protected_range").set_text(f"Protected Range: {self.__config_values['protected_range']}")
+        gui.get_slider_label("visual_range").set_text(f"Visual Range: {self.__config_values['visual_range']}")
+        gui.get_slider_label("separation").set_text(f"Separation: {self.__config_values['separation']:.2f}")
+        gui.get_slider_label("alignment").set_text(f"Alignment: {self.__config_values['alignment']:.2f}")
+        gui.get_slider_label("cohesion").set_text(f"Cohesion: {self.__config_values['cohesion']:.2f}")
+
     def handle_events(self, gui):
             for event in pyg.event.get():
                 active_gui = gui.get_active()
@@ -425,18 +368,6 @@ class Sim:
                             
                 gui.process_gui_event(event)
 
-    # Check mouse position does not exceed screen boundaries and does not fall in forbidden GUI zone
-    def mouse_in_boundary(self):
-        mpos = pyg.mouse.get_pos()
-        if mpos[1] < Config.MOUSE_BOUNDARY_MARGIN:
-            return False
-        elif mpos[0] == 0 or mpos[0] >= (Config.SCREEN_WIDTH - 1):
-            return False
-        elif mpos[1] >= (Config.SCREEN_HEIGHT - 1):
-            return False
-        
-        return True
-  
     def step(self):
         for boid in self.__boid_container:
             boid.step()
@@ -456,20 +387,6 @@ class Sim:
             self.__assembly_point.draw(self.__screen)
 
         self.__path_graph.draw(self.__screen)
-
-    def update_gui_values(self, gui):
-        # Add values from sliders to simulation instance
-        self.__config_values["protected_range"] = gui.get_slider("protected_range").get_current_value()
-        self.__config_values["visual_range"] = gui.get_slider("visual_range").get_current_value()
-        self.__config_values["separation"] = gui.get_slider("separation").get_current_value()
-        self.__config_values["alignment"] = gui.get_slider("alignment").get_current_value()
-        self.__config_values["cohesion"] = gui.get_slider("cohesion").get_current_value()
-
-        gui.get_slider_label("protected_range").set_text(f"Protected Range: {self.__config_values['protected_range']}")
-        gui.get_slider_label("visual_range").set_text(f"Visual Range: {self.__config_values['visual_range']}")
-        gui.get_slider_label("separation").set_text(f"Separation: {self.__config_values['separation']:.2f}")
-        gui.get_slider_label("alignment").set_text(f"Alignment: {self.__config_values['alignment']:.2f}")
-        gui.get_slider_label("cohesion").set_text(f"Cohesion: {self.__config_values['cohesion']:.2f}")
 
     def run(self):
         self.__running = True
@@ -505,6 +422,88 @@ class Sim:
             
             # Swap buffers
             pyg.display.flip()
+
+    def get_config_value(self, type):
+        return self.__config_values[type]
+    
+    def get_path_graph(self):
+        return self.__path_graph
+    
+    def get_map_builder(self):
+        return self.__map_builder
+
+    def get_window(self):
+        return self.__window
+    
+    def get_gui_manager(self):
+        return self.__gui.get_gui_manager()
+    
+    def get_gui(self):
+        return self.__gui
+    
+    def get_map_loaded(self):
+        return self.__map_loaded
+    
+    def get_assembly_point(self):
+        return self.__assembly_point
+
+    def get_boid_container(self):
+        return self.__boid_container
+
+    def get_boundary_container(self):
+        return self.__boundary_container
+    
+    def create_assembly_point(self, point, json=False):
+        if json:
+            self.__map_builder.set_assembly(AssemblyPoint(pyg.math.Vector2(point)))
+        else:
+            self.__assembly_point = point
+            self.__map_builder.get_builder_graph().add_node(pyg.math.Vector2(point.get_pos()), 'assembly')
+
+    def create_boid_container(self, lst, json=False):
+        if json:
+            boids = []
+            for pos in lst:
+                boid = Boid(self)
+                boid.set_pos(pyg.math.Vector2(pos))
+                boids.append(boid)
+            self.__map_builder.set_boids(boids)
+
+        else:
+            for boid in lst:
+                self.__boid_container.append(boid)
+
+    def create_boundary_container(self, lst, json=False):
+        if json:
+            boundaries = []
+            for pos in lst:
+                boundaries.append(Boundary((pyg.math.Vector2(pos[0]), pyg.math.Vector2(pos[1]))))
+            self.__map_builder.set_boundaries(boundaries)
+        else:
+            for boundary in lst:
+                self.__boundary_container.append(boundary)
+
+    def set_game_state(self, state):
+        if state == "menu":
+            self.__current_game_state = GameState.MENU
+            self.__gui.set_gui_layout("menu")
+        elif state == "map_builder":
+            self.__current_game_state = GameState.MAP_BUILDER
+            self.__gui.set_gui_layout("map_builder")
+            # Clear previous maps by calling reset function
+        elif state == "simulation":
+            # Get data from map builder - boundaries, assembly point and boids
+            self.__current_game_state = GameState.SIMULATION
+            self.__gui.set_gui_layout("game")
+        else:
+            pass
+
+    def set_map_loaded(self):
+        self.__map_loaded = True
+
+    def set_map_unloaded(self):
+        self.__map_loaded = False
+
 
 class PathNode:
     def __init__(self, pos, type, id):
@@ -757,8 +756,9 @@ class Menu:
 
     def __button_action(self, button_id):
         if button_id == "run":
-            if not self.__sim.is_map_loaded():
+            if not self.__sim.get_map_loaded():
                 print("No map loaded")
+                return
             self.__sim.enable_pathfinding()
             self.__sim.set_game_state("simulation")
         elif button_id == "create_map":
@@ -809,7 +809,7 @@ class Menu:
         if success:
             json_manager = JSONManager(self.__sim)
             json_manager.import_map(data)
-            self.__sim.map_loaded()
+            self.__sim.set_map_loaded()
             self.__sim.get_gui().disable_active_gui()
             self.__sim.set_game_state("map_builder")
 
@@ -869,6 +869,7 @@ class MapBuilder:
         self.__sim = sim
         self.__jsonmanager = JSONManager(sim)
 
+        # Imported image
         self.__tracing_img = None
         self.__tracing_img_path = None
 
@@ -886,7 +887,7 @@ class MapBuilder:
         # Edge drawing
         self.__edge_start = None
 
-        # UI buttons?
+        # UI buttons
         self.__tool_buttons = {}
         self.__confirm_buttons = {}
         self.__create_map_buttons()
@@ -894,100 +895,27 @@ class MapBuilder:
         # Instantiate file manager
         self.__file_manager = FileManager(self.__sim)
 
-        # Dialog managers
+        # Dialog manager
         self.__save_dialog = None
-        self.__load_dialog = None
-
-    # Resets map builder variables
-    def reset(self):
-        self.__builder_boundaries = []
-        self.__builder_assembly = None
-        self.__builder_boids = []
-        self.__builder_graph.clear()
-        self.__tracing_img = None
-        self.__tracing_img_path = None
-        self.__current_tool = None
-        self.__drawing_wall = False
-        self.__wall_start = None
-
-        self.__edge_start = None
-
-        self.__save_dialog = None
-        self.__sim.map_unloaded()
-
-    def set_boundaries(self, lst):
-        self.__builder_boundaries = lst
-
-    def set_assembly(self, point):
-        self.__builder_assembly = point
-        self.__builder_graph.add_node(point.get_pos(), 'assembly')
-
-    def set_boids(self, lst):
-        self.__builder_boids = lst
-
-    def get_builder_graph(self):
-        return self.__builder_graph
 
     def __create_map_buttons(self):
-        tools_list = [
-            ("import_img", f"{Config.IMAGES_FOLDER}/add_image_tool.png", 0),
-            ("wall", f"{Config.IMAGES_FOLDER}/wall_tool.png", 1),
-            ("assembly", f"{Config.IMAGES_FOLDER}/assembly_tool.png", 2),
-            ("exit", f"{Config.IMAGES_FOLDER}/exit_tool.png", 3),
-            ("destination", f"{Config.IMAGES_FOLDER}/destination_tool.png", 4),
-            ("edge", f"{Config.IMAGES_FOLDER}/edge_tool.png", 5),
-            ("boid", f"{Config.IMAGES_FOLDER}/boid_tool.png", 6),
-            ("eraser", f"{Config.IMAGES_FOLDER}/eraser_tool.png", 7)
-        ]
-        
-        for id, img, i in tools_list:
-            y = Config.TOOLS_Y + (i * Config.TOOLS_MARGIN)
-            self.__tool_buttons[id] = Button(Config.TOOLS_X, y, img, 0.5, selected_path=f"{img.split('.')[0]}_selected.png")
-
-        self.__confirm_buttons["confirm"] = Button(Config.CONFIRM_X, Config.CONFIRM_Y, f"{Config.IMAGES_FOLDER}/confirm_button.png", 0.3)
-        self.__confirm_buttons["cancel"] = Button(Config.CONFIRM_X - 55, Config.CONFIRM_Y, f"{Config.IMAGES_FOLDER}/cancel_button.png", 0.3)
-
-    def tool_click(self, id):
-        if id == "import_img":
-            self.__import_image()
-
-        elif id == self.__current_tool:
-            self.__current_tool = None
-            self.__drawing_wall = False
-
-        else:
-            self.__current_tool = id
-            self.__drawing_wall = False
-
-    def confirm_click(self, id):
-        if id == "confirm":
-            if not self.__builder_assembly:
-                print("Must place assembly point")
-                return
+            tools_list = [
+                ("import_img", f"{Config.IMAGES_FOLDER}/add_image_tool.png", 0),
+                ("wall", f"{Config.IMAGES_FOLDER}/wall_tool.png", 1),
+                ("assembly", f"{Config.IMAGES_FOLDER}/assembly_tool.png", 2),
+                ("exit", f"{Config.IMAGES_FOLDER}/exit_tool.png", 3),
+                ("destination", f"{Config.IMAGES_FOLDER}/destination_tool.png", 4),
+                ("edge", f"{Config.IMAGES_FOLDER}/edge_tool.png", 5),
+                ("boid", f"{Config.IMAGES_FOLDER}/boid_tool.png", 6),
+                ("eraser", f"{Config.IMAGES_FOLDER}/eraser_tool.png", 7)
+            ]
             
-            elif len(self.__builder_boids) == 0:
-                print("Must place at least one boid")
-                return
-            
-            self.__sim.import_objects_to_sim(self.__builder_boundaries, self.__builder_assembly, self.__builder_boids)
+            for id, img, i in tools_list:
+                y = Config.TOOLS_Y + (i * Config.TOOLS_MARGIN)
+                self.__tool_buttons[id] = Button(Config.TOOLS_X, y, img, 0.5, selected_path=f"{img.split('.')[0]}_selected.png")
 
-            self.__import_graph_to_sim()
-
-            if self.__sim.is_map_loaded():
-                self.__sim.set_game_state("menu")
-                return
-            
-            if self.__save_dialog is None:
-                self.__open_save_dialog()
-                return
-
-            file_input = self.__save_dialog.get_text().strip()
-            self.__handle_save_path(file_input)
-
-        elif id == "cancel":
-            self.reset()
-            self.__sim.map_unloaded()
-            self.__sim.set_game_state("menu")
+            self.__confirm_buttons["confirm"] = Button(Config.CONFIRM_X, Config.CONFIRM_Y, f"{Config.IMAGES_FOLDER}/confirm_button.png", 0.3)
+            self.__confirm_buttons["cancel"] = Button(Config.CONFIRM_X - 55, Config.CONFIRM_Y, f"{Config.IMAGES_FOLDER}/cancel_button.png", 0.3)
 
     def __import_graph_to_sim(self):
         sim_graph = self.__sim.get_path_graph()
@@ -1041,6 +969,8 @@ class MapBuilder:
         self.__save_dialog.kill()
         self.__sim.get_gui().disable_active_gui()
 
+        self.__sim.set_map_loaded()
+
         if success:
             self.__sim.set_game_state('menu')
         else:
@@ -1049,26 +979,6 @@ class MapBuilder:
 
     def __import_image(self):
         self.__file_manager.create_file_explorer()
-        
-
-    def handle_image(self, path):
-        self.__sim.get_gui().disable_active_gui()
-
-        if path:
-            self.__tracing_img_path = path
-            try:
-                # Original image file
-                original = pyg.image.load(path).convert_alpha()
-
-                # Image file scaled to fit on screen
-                scaled = self.__scale_image(original)
-
-                # Filter applied to image
-                filtered = self.__apply_filter(scaled)
-                self.__tracing_img = filtered
-
-            except Exception as exception:
-                print(f"Error loading image with error: {exception}")
 
     def __scale_image(self, img):
         img_w, img_h = img.get_size()
@@ -1096,29 +1006,6 @@ class MapBuilder:
 
         return traced_img
 
-    def handle_click(self, pos, button):
-        if self.__sim.get_gui().get_active() is False:
-            if self.__current_tool == "wall":
-                self.__use_wall_tool(pos, button)
-
-            elif self.__current_tool == "assembly":
-                self.__use_assembly_tool(pos)
-
-            elif self.__current_tool == "exit":
-                self.__use_exit_tool(pos)
-
-            elif self.__current_tool == "destination":
-                self.__use_destination_tool(pos)
-
-            elif self.__current_tool == "edge":
-                self.__use_edge_tool()
-
-            elif self.__current_tool == "boid":
-                self.__use_boid_tool(pos)
-
-            elif self.__current_tool == "eraser":
-                self.__use_erase_tool(pos)
-
     def __use_wall_tool(self, pos, button):
         if button == 1:
             if not self.__drawing_wall:
@@ -1128,20 +1015,6 @@ class MapBuilder:
                 self.wall_end(pyg.math.Vector2(pos))
                 self.__wall_start = pyg.math.Vector2(pos)
                 self.__drawing_wall = True
-
-    def wall_end(self, pos, esc=False):
-        if self.__drawing_wall and self.__wall_start is not None:
-            if not esc:
-                wall_end = pyg.math.Vector2(pos)
-
-                if self.__wall_start.distance_squared_to(wall_end) > 5 ** 2: # Squared function for efficiency
-                    new_boundary = Boundary((self.__wall_start, wall_end))
-                    self.__builder_boundaries.append(new_boundary)
-                else:
-                    print("Wall too short")
-
-            self.__drawing_wall = False
-            self.__wall_start = None
 
     def __use_assembly_tool(self, pos):
         if self.__builder_assembly:
@@ -1190,16 +1063,6 @@ class MapBuilder:
                         if Helper.clear_path(node_a, node_b, self.__builder_boundaries):
                             self.__builder_graph.add_edge(id_a, id_b, True)
 
-
-    def __find_node_at_pos(self, pos, radius):
-        pos_vector = pyg.math.Vector2(pos)
-
-        for node in self.__builder_graph.get_all_nodes().values():
-            if node.get_pos().distance_squared_to(pos_vector) < radius ** 2:
-                return node.get_id()
-            
-        return None
-
     def __use_erase_tool(self, pos):
         node_id = self.__find_node_at_pos(pos, Config.ERASE_RADIUS)
         if node_id is not None:
@@ -1221,6 +1084,15 @@ class MapBuilder:
                 self.__builder_boids.remove(boid)
                 return
 
+    def __find_node_at_pos(self, pos, radius):
+        pos_vector = pyg.math.Vector2(pos)
+
+        for node in self.__builder_graph.get_all_nodes().values():
+            if node.get_pos().distance_squared_to(pos_vector) < radius ** 2:
+                return node.get_id()
+            
+        return None
+
     def __near_boundary(self, point, boundary, radius):
         start, end = boundary.get_pos()
         line = end - start
@@ -1234,6 +1106,119 @@ class MapBuilder:
         closest = line * t
 
         return closest.distance_to(pyg.math.Vector2(point)) < radius
+
+    def reset(self):
+        self.__builder_boundaries = []
+        self.__builder_assembly = None
+        self.__builder_boids = []
+        self.__builder_graph.clear()
+        self.__tracing_img = None
+        self.__tracing_img_path = None
+        self.__current_tool = None
+        self.__drawing_wall = False
+        self.__wall_start = None
+
+        self.__edge_start = None
+
+        self.__save_dialog = None
+        self.__sim.set_map_unloaded()
+
+    def tool_click(self, id):
+        if id == "import_img":
+            self.__import_image()
+
+        elif id == self.__current_tool:
+            self.__current_tool = None
+            self.__drawing_wall = False
+
+        else:
+            self.__current_tool = id
+            self.__drawing_wall = False
+
+    def confirm_click(self, id):
+        if id == "confirm":
+            if not self.__builder_assembly:
+                print("Must place assembly point")
+                return
+            
+            elif len(self.__builder_boids) == 0:
+                print("Must place at least one boid")
+                return
+            
+            self.__sim.import_objects_to_sim(self.__builder_boundaries, self.__builder_assembly, self.__builder_boids)
+            self.__import_graph_to_sim()
+
+            if self.__sim.get_map_loaded():
+                self.__sim.set_game_state("menu")
+                return
+            
+            if self.__save_dialog is None:
+                self.__open_save_dialog()
+                return
+
+            file_input = self.__save_dialog.get_text().strip()
+            self.__handle_save_path(file_input)
+
+        elif id == "cancel":
+            self.reset()
+            self.__sim.set_map_unloaded()
+            self.__sim.set_game_state("menu")
+
+    def handle_image(self, path):
+        self.__sim.get_gui().disable_active_gui()
+
+        if path:
+            self.__tracing_img_path = path
+            try:
+                # Original image file
+                original = pyg.image.load(path).convert_alpha()
+
+                # Image file scaled to fit on screen
+                scaled = self.__scale_image(original)
+
+                # Filter applied to image
+                filtered = self.__apply_filter(scaled)
+                self.__tracing_img = filtered
+
+            except Exception as exception:
+                print(f"Error loading image with error: {exception}")
+
+    def handle_click(self, pos, button):
+        if self.__sim.get_gui().get_active() is False:
+            if self.__current_tool == "wall":
+                self.__use_wall_tool(pos, button)
+
+            elif self.__current_tool == "assembly":
+                self.__use_assembly_tool(pos)
+
+            elif self.__current_tool == "exit":
+                self.__use_exit_tool(pos)
+
+            elif self.__current_tool == "destination":
+                self.__use_destination_tool(pos)
+
+            elif self.__current_tool == "edge":
+                self.__use_edge_tool()
+
+            elif self.__current_tool == "boid":
+                self.__use_boid_tool(pos)
+
+            elif self.__current_tool == "eraser":
+                self.__use_erase_tool(pos)
+
+    def wall_end(self, pos, esc=False):
+        if self.__drawing_wall and self.__wall_start is not None:
+            if not esc:
+                wall_end = pyg.math.Vector2(pos)
+
+                if self.__wall_start.distance_squared_to(wall_end) > 5 ** 2: # Squared function for efficiency
+                    new_boundary = Boundary((self.__wall_start, wall_end))
+                    self.__builder_boundaries.append(new_boundary)
+                else:
+                    print("Wall too short")
+
+            self.__drawing_wall = False
+            self.__wall_start = None
 
     def render_builder(self, screen):
         screen.fill(Config.SCREEN_COLOUR)
@@ -1272,6 +1257,9 @@ class MapBuilder:
             if button.draw(screen):
                 self.confirm_click(button_id)
 
+    def get_builder_graph(self):
+        return self.__builder_graph
+
     def get_tool_buttons(self):
         return self.__tool_buttons
 
@@ -1286,6 +1274,16 @@ class MapBuilder:
     
     def set_tracing_image(self, img):
         self.__tracing_img = img
+
+    def set_boundaries(self, lst):
+        self.__builder_boundaries = lst
+
+    def set_assembly(self, point):
+        self.__builder_assembly = point
+        self.__builder_graph.add_node(point.get_pos(), 'assembly')
+
+    def set_boids(self, lst):
+        self.__builder_boids = lst
 
 class FileManager:
     def __init__(self, sim):
@@ -1770,7 +1768,7 @@ class Boid(BoidObject):
         
         return force
 
-class BoundaryManager():
+class BoundaryManager:
     def __init__(self, sim):
         self.__current_start_pos = None
         self.__sim = sim
