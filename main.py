@@ -1,6 +1,5 @@
 import pygame as pyg
 import pygame_gui as pygui
-import random
 import math
 import abc
 import os
@@ -9,6 +8,7 @@ import json
 from enum import Enum
 
 class Config:
+    # File locations
     IMAGES_FOLDER = "images"
     MAPS_FOLDER = "maps"
 
@@ -17,13 +17,9 @@ class Config:
     SCREEN_HEIGHT = 800
     SCREEN_COLOUR = (0, 0, 0)
     FPS = 60
-    NUMBER_OF_GRIDS_WIDE = 3
-    NUMBER_OF_GRIDS_HIGH = 3
-    DISPLAY_GRIDS = True
 
     # Boid constants
     NUMBER_OF_BOIDS = 150
-    GENERATION_MARGIN = 12 # The larger the number, the smaller the margin
     BOID_SIZE = 5
     ASSEMBLY_SIZE = 25
     BOUNDARY_THICKNESS = 3
@@ -33,6 +29,12 @@ class Config:
     ASSEMBLY_COLOUR = (255, 255, 0)
     EXIT_COLOUR = (0, 255, 0)
     DESTINATION_COLOUR = (0, 150, 255)
+
+    # Movement values
+    MAX_SPEED = 1
+    MAX_ACC_REQUEST = 0.15
+
+    # Slider values
     DEFAULT_VISUAL_RANGE = 100
     DEFAULT_PROTECTED_RANGE = 20
     DEFAULT_BOUNDARY_RANGE = 5
@@ -43,8 +45,6 @@ class Config:
     DEFAULT_AVOIDANCE_FACTOR = 5
     ARRIVAL_SLOWING_RADIUS = 100
     ARRIVED_RADIUS = 5
-    MAX_SPEED = 1
-    MAX_ACC_REQUEST = 0.15
     GRAPH_EDGE_RADIUS = 150
 
     # Menu layout
@@ -61,8 +61,8 @@ class Config:
     SAVE_DIALOG_SIZE = (200, 50)
 
     # Map builder layout
-    TOOLS_X = 40
-    TOOLS_Y = 100
+    TOOLS_X = 35
+    TOOLS_Y = 130
     TOOLS_MARGIN = 80
     CONFIRM_X = SCREEN_WIDTH - 90
     CONFIRM_Y = SCREEN_HEIGHT - 80
@@ -91,18 +91,6 @@ class PlaybackControls:
         self.__control_buttons["pause"] = Button(Config.PLAYBACK_X, Config.PLAYBACK_Y, f"{Config.IMAGES_FOLDER}/pause_button.png", 0.3)
         self.__control_buttons["step"] = Button(Config.PLAYBACK_X - Config.PLAYBACK_SPACING, Config.PLAYBACK_Y, f"{Config.IMAGES_FOLDER}/step_button.png", 0.3)
 
-    def is_running(self):
-        return self.__is_running
-    
-    def play(self):
-        self.__is_running = True
-
-    def pause(self):
-        self.__is_running = False
-
-    def step(self):
-        self.__sim.step()
-
     def draw_buttons(self, screen):
         gui_active = self.__sim.get_gui().get_active()
 
@@ -115,26 +103,37 @@ class PlaybackControls:
             if self.__control_buttons["step"].draw(screen, gui_active):
                 self.step()
 
+    def is_running(self):
+        return self.__is_running
+
+    def play(self):
+        self.__is_running = True
+
+    def pause(self):
+        self.__is_running = False
+
+    def step(self):
+        self.__sim.step()
+
 class GUI:
     def __init__(self, sim):
+        self.__sim = sim
+        self.__window = self.__sim.get_window()
         self.__manager = pygui.UIManager((Config.SCREEN_WIDTH, Config.SCREEN_HEIGHT))
+
         self.__gui_margin = (10, 20)
         self.__slider_size = (150, 40)
         self.__gui_sliders = 5
-        self.__sim = sim
         self.__slider_moving = False
-        self.__window = self.__sim.get_window()
-
+        
         self.__active_gui = False
 
         self.__slider_keys = ["protected_range", "visual_range", "separation", "alignment", "cohesion"]
-
         self.__sliders = {"protected_range": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect((0,0), self.__slider_size), start_value=Config.DEFAULT_PROTECTED_RANGE, value_range=(10, 100), manager=self.__manager), 
                           "visual_range": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect((0,0), self.__slider_size), start_value=Config.DEFAULT_VISUAL_RANGE, value_range=(50, 300), manager=self.__manager),
                           "separation": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect((0,0), self.__slider_size), start_value=Config.DEFAULT_SEPARATION_FACTOR, value_range=(0.1, 3), manager=self.__manager),
                           "alignment": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect((0,0), self.__slider_size), start_value=Config.DEFAULT_ALIGNMENT_FACTOR, value_range=(0.1, 3), manager=self.__manager),
                           "cohesion": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect((0,0), self.__slider_size), start_value=Config.DEFAULT_COHESION_FACTOR, value_range=(0.1, 3), manager=self.__manager)}
-
         self.__slider_labels = {"protected_range": pygui.elements.UILabel(relative_rect=pyg.Rect((0,0), self.__slider_size), text=f"Protected Range: {Config.DEFAULT_PROTECTED_RANGE}"),
                                  "visual_range": pygui.elements.UILabel(relative_rect=pyg.Rect((0,0), self.__slider_size), text=f"Visual Range: {Config.DEFAULT_VISUAL_RANGE}"),
                                  "separation": pygui.elements.UILabel(relative_rect=pyg.Rect((0,0), self.__slider_size), text=f"Separation: {Config.DEFAULT_SEPARATION_FACTOR:.2f}"),
@@ -143,14 +142,38 @@ class GUI:
 
         self.set_gui_layout("menu")
 
+    def process_gui_event(self, event):
+        self.__manager.process_events(event)
+
+    def update_gui(self, time_delta):
+        self.__manager.update(time_delta)
+
+    def render_gui(self, screen):
+        self.__manager.draw_ui(screen)
+
     def get_active(self):
         return self.__active_gui
     
+    def get_slider_label(self, slider):
+        return self.__slider_labels[slider]
+    
+    def get_slider_size(self):
+        return self.__slider_size
+
+    def get_slider(self, slider):
+        return self.__sliders[slider]
+
+    def get_gui_manager(self):
+        return self.__manager
+
     def enable_active_gui(self):
         self.__active_gui = True
 
     def disable_active_gui(self):
         self.__active_gui = False
+
+    def check_slider_moving(self):
+        return self.__slider_moving
 
     def set_gui_layout(self, state):
         for i, slider_key in enumerate(self.__slider_keys):
@@ -191,31 +214,6 @@ class GUI:
                 self.__slider_labels[slider_key].set_relative_position((x, y + self.__slider_size[1] - 10))
                 self.__sliders[slider_key].set_relative_position((x, y))
     
-
-    def get_slider(self, slider):
-        return self.__sliders[slider]
-
-    def get_slider_label(self, slider):
-        return self.__slider_labels[slider]
-    
-    def get_slider_size(self):
-        return self.__slider_size
-
-    def process_gui_event(self, event):
-        self.__manager.process_events(event)
-
-    def check_slider_moving(self):
-        return self.__slider_moving
-
-    def update_gui(self, time_delta):
-        self.__manager.update(time_delta)
-
-    def render_gui(self, screen):
-        self.__manager.draw_ui(screen)
-
-    def get_gui_manager(self):
-        return self.__manager
-
 class Sim:
     def __init__(self):
         pyg.init()
@@ -230,6 +228,7 @@ class Sim:
         self.__window = self.__screen.get_rect()
         self.__clock = pyg.time.Clock()
         self.__gui = GUI(self)
+        self.__tracing_img = None
 
         # Composite objects
         self.__menu = Menu(self)
@@ -258,8 +257,9 @@ class Sim:
     def import_graph(self, graph):
         self.__path_graph.load_json(graph)
     
-    def import_objects_to_sim(self, boundaries, assembly, boids):
+    def import_objects_to_sim(self, boundaries, assembly, boids, img):
         self.reset_simulation()
+        self.set_tracing_img(img)
         self.create_boundary_container(boundaries)
         self.create_boid_container(boids)
         self.create_assembly_point(assembly)
@@ -326,7 +326,7 @@ class Sim:
                     # Check left mouse button pressed
                     if pyg.mouse.get_pressed()[0]:
                         if self.mouse_in_boundary():
-                            pass # TODO: Add boid on click?
+                            pass
 
                 if self.__current_game_state == GameState.MAP_BUILDER:
                     if event.type == pyg.MOUSEBUTTONDOWN:
@@ -376,6 +376,11 @@ class Sim:
         # Wipe last screen
         self.__screen.fill(Config.SCREEN_COLOUR)
 
+        # Render image before other objects to have at back of screen
+        if self.__tracing_img:
+            img_rect = self.__tracing_img.get_rect(center=(Config.SCREEN_WIDTH // 2 + 60, Config.SCREEN_HEIGHT // 2))
+            self.__screen.blit(self.__tracing_img, img_rect)
+
         for boid in self.__boid_container:
             boid.draw(self.__screen)
 
@@ -385,8 +390,6 @@ class Sim:
             
         if self.__assembly_point is not None:
             self.__assembly_point.draw(self.__screen)
-
-        self.__path_graph.draw(self.__screen)
 
     def run(self):
         self.__running = True
@@ -458,7 +461,6 @@ class Sim:
             self.__map_builder.set_assembly(AssemblyPoint(pyg.math.Vector2(point)))
         else:
             self.__assembly_point = point
-            self.__map_builder.get_builder_graph().add_node(pyg.math.Vector2(point.get_pos()), 'assembly')
 
     def create_boid_container(self, lst, json=False):
         if json:
@@ -498,12 +500,14 @@ class Sim:
         else:
             pass
 
+    def set_tracing_img(self, img):
+        self.__tracing_img = img 
+
     def set_map_loaded(self):
         self.__map_loaded = True
 
     def set_map_unloaded(self):
         self.__map_loaded = False
-
 
 class PathNode:
     def __init__(self, pos, type, id):
@@ -512,8 +516,13 @@ class PathNode:
         self.__id = id
         self.__neighbours = {}
 
-    def add_neighbour(self, id, distance):
-        self.__neighbours[id] = distance
+    def draw(self, screen):
+        if self.__type == 'exit':
+            pyg.draw.circle(screen, Config.EXIT_COLOUR, (int(self.__pos.x), int(self.__pos.y)), 15)
+        elif self.__type == 'destination':
+            pyg.draw.circle(screen, Config.DESTINATION_COLOUR, (int(self.__pos.x), int(self.__pos.y)), 8)
+        else:
+            pyg.draw.circle(screen, Config.ASSEMBLY_COLOUR, (int(self.__pos.x), int(self.__pos.y)), 25)
 
     def get_neighbours(self):
         return self.__neighbours
@@ -527,13 +536,8 @@ class PathNode:
     def get_id(self):
         return self.__id
     
-    def draw(self, screen):
-        if self.__type == 'exit':
-            pyg.draw.circle(screen, Config.EXIT_COLOUR, (int(self.__pos.x), int(self.__pos.y)), 15)
-        elif self.__type == 'destination':
-            pyg.draw.circle(screen, Config.DESTINATION_COLOUR, (int(self.__pos.x), int(self.__pos.y)), 8)
-        else:
-            pyg.draw.circle(screen, Config.ASSEMBLY_COLOUR, (int(self.__pos.x), int(self.__pos.y)), 25)
+    def add_neighbour(self, id, distance):
+        self.__neighbours[id] = distance
 
 class PathGraph:
     def __init__(self):
@@ -564,7 +568,7 @@ class PathGraph:
         node_a.add_neighbour(id_b, distance)
 
         if bi:
-            self.__adjacency_list[id_b][id_b] = distance
+            self.__adjacency_list[id_b][id_a] = distance
             node_b.add_neighbour(id_a, distance)
 
     def remove_node(self, id):
@@ -576,22 +580,47 @@ class PathGraph:
                 if id in neighbours:
                     del neighbours[id]
 
-    def get_node(self, id):
-        try:
-            node = self.__nodes[id]
-            return node
-        except KeyError:
+    def find_nearest_node(self, pos, type):
+        remaining_checks = self.__nodes.values()
+
+        if type:
+            remaining_checks = [n for n in remaining_checks if n.get_type() == type]
+
+        if not remaining_checks:
             return None
         
-    def get_adjacency_list(self):
-        return self.__adjacency_list
-        
-    def get_nodes_by_type(self, type):
-        return [node for node in self.__nodes.values() if node.get_type() == type]
+        nearest = min(remaining_checks, key=lambda n: pos.distance_squared_to(n.get_pos()))
+        return nearest.get_id()  
 
-    def get_all_nodes(self):
-        return self.__nodes
-    
+    def to_json(self):
+        json_dict = {
+            "nodes": [{"id": node.get_id(), "pos": (node.get_pos().x, node.get_pos().y), "type": node.get_type()} for node in self.__nodes.values()],
+            "edges": [{"start": node_id, "end": neighbour_id, "distance": distance} for node_id, neighbours in self.__adjacency_list.items() for neighbour_id, distance in neighbours.items()],
+        }
+
+        return json_dict
+
+    def load_json(self, data):
+        self.clear()
+
+        node_map = {}
+        for node_data in data["nodes"]:
+            id = self.add_node(pyg.math.Vector2(node_data["pos"]), node_data["type"])
+            node_map[node_data['id']] = id
+        
+        edges_done = []
+        for edge_data in data["edges"]:
+            old_start = edge_data["start"]
+            old_end = edge_data["end"]
+
+            start = node_map.get(old_start)
+            end = node_map.get(old_end)
+
+            edge_key = (min(start, end), max(start, end))
+            if edge_key not in edges_done:
+                self.add_edge(start, end, True)
+                edges_done.append(edge_key)
+
     def dijkstra(self, start, end):
         if start not in self.__nodes or end not in self.__nodes:
             return None
@@ -636,19 +665,7 @@ class PathGraph:
             current = previous[current]
 
         path.reverse()
-        return path      
-    
-    def find_nearest_node(self, pos, type):
-        remaining_checks = self.__nodes.values()
-
-        if type:
-            remaining_checks = [n for n in remaining_checks if n.get_type() == type]
-
-        if not remaining_checks:
-            return None
-        
-        nearest = min(remaining_checks, key=lambda n: pos.distance_squared_to(n.get_pos()))
-        return nearest.get_id()
+        return path
     
     def draw(self, screen):
         for node_id, neighbours in self.__adjacency_list.items():
@@ -665,35 +682,22 @@ class PathGraph:
         self.__adjacency_list.clear()
         self.__next_id = 0
 
-    def to_json(self):
-        json_dict = {
-            "nodes": [{"id": node.get_id(), "pos": (node.get_pos().x, node.get_pos().y), "type": node.get_type()} for node in self.__nodes.values()],
-            "edges": [{"start": node_id, "end": neighbour_id, "distance": distance} for node_id, neighbours in self.__adjacency_list.items() for neighbour_id, distance in neighbours.items()],
-        }
-
-        return json_dict
-
-    def load_json(self, data):
-        self.clear()
-
-        node_map = {}
-        for node_data in data["nodes"]:
-            id = self.add_node(pyg.math.Vector2(node_data["pos"]), node_data["type"])
-            node_map[node_data['id']] = id
+    def get_node(self, id):
+        try:
+            node = self.__nodes[id]
+            return node
+        except KeyError:
+            return None
         
-        edges_done = []
-        for edge_data in data["edges"]:
-            old_start = edge_data["start"]
-            old_end = edge_data["end"]
+    def get_adjacency_list(self):
+        return self.__adjacency_list
+        
+    def get_nodes_by_type(self, type):
+        return [node for node in self.__nodes.values() if node.get_type() == type]
 
-            start = node_map.get(old_start)
-            end = node_map.get(old_end)
-
-            edge_key = (min(start, end), max(start, end))
-            if edge_key not in edges_done:
-                self.add_edge(start, end, True)
-                edges_done.append(edge_key)
-
+    def get_all_nodes(self):
+        return self.__nodes
+    
 class PathBehaviour:
     def __init__(self, path, graph):
         self.__path = path
@@ -701,6 +705,15 @@ class PathBehaviour:
         self.__current_destination_index = 0
         self.__completed = False
 
+    def advance_destination(self):
+        self.__current_destination_index += 1
+
+        if self.__current_destination_index >= len(self.__path):
+            self.__completed = True
+
+    def get_completed(self):
+        return self.__completed
+    
     def get_current_destination(self):
         if self.__completed or not self.__path:
             return None
@@ -713,16 +726,7 @@ class PathBehaviour:
         node = self.__graph.get_node(id)
 
         return node.get_pos() if node else None
-    
-    def advance_destination(self):
-        self.__current_destination_index += 1
 
-        if self.__current_destination_index >= len(self.__path):
-            self.__completed = True
-
-    def is_completed(self):
-        return self.__completed
-    
     def get_path(self):
         return self.__path
 
@@ -764,6 +768,7 @@ class Menu:
         elif button_id == "create_map":
             self.__sim.get_map_builder().reset()
             self.__sim.set_game_state("map_builder")
+            self.__sim.get_map_builder().set_unchanged()
         elif button_id == "load_map":
             self.__open_load_dialog()
             # Show file selector
@@ -812,6 +817,7 @@ class Menu:
             self.__sim.set_map_loaded()
             self.__sim.get_gui().disable_active_gui()
             self.__sim.set_game_state("map_builder")
+            self.__sim.get_map_builder().set_unchanged()
 
         else:
             print(f"Load failed with: {error}")
@@ -844,9 +850,6 @@ class Button:
         h = image.get_height()
         return pyg.transform.scale(image, (int(w * scale), int(h * scale)))
 
-    def set_selected(self, selected):
-        self.__image = self.__selected_img if selected else self.__normal_img
-
     def draw(self, surface, disabled=False):
         action = False
 
@@ -863,6 +866,9 @@ class Button:
 
         surface.blit(self.__image, (self.__rect.x, self.__rect.y))
         return action
+
+    def set_selected(self, selected):
+        self.__image = self.__selected_img if selected else self.__normal_img
 
 class MapBuilder:
     def __init__(self, sim):
@@ -897,6 +903,8 @@ class MapBuilder:
 
         # Dialog manager
         self.__save_dialog = None
+        
+        self.__changes_made = False
 
     def __create_map_buttons(self):
             tools_list = [
@@ -905,9 +913,8 @@ class MapBuilder:
                 ("assembly", f"{Config.IMAGES_FOLDER}/assembly_tool.png", 2),
                 ("exit", f"{Config.IMAGES_FOLDER}/exit_tool.png", 3),
                 ("destination", f"{Config.IMAGES_FOLDER}/destination_tool.png", 4),
-                ("edge", f"{Config.IMAGES_FOLDER}/edge_tool.png", 5),
-                ("boid", f"{Config.IMAGES_FOLDER}/boid_tool.png", 6),
-                ("eraser", f"{Config.IMAGES_FOLDER}/eraser_tool.png", 7)
+                ("boid", f"{Config.IMAGES_FOLDER}/boid_tool.png", 5),
+                ("eraser", f"{Config.IMAGES_FOLDER}/eraser_tool.png", 6)
             ]
             
             for id, img, i in tools_list:
@@ -932,7 +939,7 @@ class MapBuilder:
                 new_neighbour_id = node_map[neighbour_id]
                 sim_graph.add_edge(new_id, new_neighbour_id, True)
 
-    def __open_save_dialog(self):
+    def __open_save_dialog(self, placeholder="map.json"):
         if self.__save_dialog is not None:
             self.__save_dialog.kill()
 
@@ -941,7 +948,7 @@ class MapBuilder:
 
         dialog_rect = pyg.Rect((Config.SCREEN_WIDTH // 2 + 208, Config.SCREEN_HEIGHT - 78), Config.SAVE_DIALOG_SIZE)
         self.__save_dialog = pygui.elements.UITextEntryLine(relative_rect=dialog_rect, manager=gui_manager, object_id="#save_file_path")
-        self.__save_dialog.set_text("map.json")
+        self.__save_dialog.set_text(placeholder)
 
     def __handle_save_path(self, path):
         if self.__save_dialog is None:
@@ -1021,7 +1028,6 @@ class MapBuilder:
             for id, node in list(self.__builder_graph.get_all_nodes().items()):
                 if node.get_type() == 'assembly':
                     self.__builder_graph.remove_node(id)
-                    break
 
         self.__builder_assembly = AssemblyPoint(pos)
         self.__builder_graph.add_node(pos, 'assembly')
@@ -1037,7 +1043,7 @@ class MapBuilder:
     def __use_destination_tool(self, pos):
         id = self.__builder_graph.add_node(pos, 'destination')
 
-    def __use_edge_tool(self):
+    def __create_edges(self):
         """
         clicked_id = self.__find_node_at_pos(pos, 20)
 
@@ -1124,6 +1130,8 @@ class MapBuilder:
         self.__sim.set_map_unloaded()
 
     def tool_click(self, id):
+        self.__changes_made = True
+
         if id == "import_img":
             self.__import_image()
 
@@ -1145,12 +1153,18 @@ class MapBuilder:
                 print("Must place at least one boid")
                 return
             
-            self.__sim.import_objects_to_sim(self.__builder_boundaries, self.__builder_assembly, self.__builder_boids)
+            self.__create_edges()
+            self.__sim.import_objects_to_sim(self.__builder_boundaries, self.__builder_assembly, self.__builder_boids, self.__tracing_img)
             self.__import_graph_to_sim()
 
             if self.__sim.get_map_loaded():
-                self.__sim.set_game_state("menu")
-                return
+                if self.__changes_made is False:
+                    self.__sim.set_game_state("menu")
+                    return
+                else:
+                    if self.__save_dialog is None:
+                        self.__open_save_dialog("updated_map.json")
+                        return
             
             if self.__save_dialog is None:
                 self.__open_save_dialog()
@@ -1158,11 +1172,12 @@ class MapBuilder:
 
             file_input = self.__save_dialog.get_text().strip()
             self.__handle_save_path(file_input)
-
+        
         elif id == "cancel":
-            self.reset()
-            self.__sim.set_map_unloaded()
-            self.__sim.set_game_state("menu")
+            if self.__sim.get_gui().get_active() is False:
+                self.reset()
+                self.__sim.set_map_unloaded()
+                self.__sim.set_game_state("menu")
 
     def handle_image(self, path):
         self.__sim.get_gui().disable_active_gui()
@@ -1196,9 +1211,6 @@ class MapBuilder:
 
             elif self.__current_tool == "destination":
                 self.__use_destination_tool(pos)
-
-            elif self.__current_tool == "edge":
-                self.__use_edge_tool()
 
             elif self.__current_tool == "boid":
                 self.__use_boid_tool(pos)
@@ -1285,6 +1297,9 @@ class MapBuilder:
     def set_boids(self, lst):
         self.__builder_boids = lst
 
+    def set_unchanged(self):
+        self.__changes_made = False
+
 class FileManager:
     def __init__(self, sim):
         self.__sim = sim
@@ -1302,6 +1317,16 @@ class JSONManager:
     def __init__(self, sim):
         self.__sim = sim
 
+    @staticmethod
+    def __validate_data(data):
+        required_fields = ["assembly_point", "boundaries", "boids", "path_graph"]
+        
+        for field in required_fields:
+            if field not in data:
+                return (False, f"Missing required field: {field}")
+
+        return (True, None)
+    
     @staticmethod
     def save_map(path, boundaries, assembly, boids, img_path=None, graph=None):
         try:
@@ -1407,16 +1432,6 @@ class JSONManager:
         except Exception as e:
             return (False, None, f"An unexpected error occurred: {str(e)}")
         
-    @staticmethod
-    def __validate_data(data):
-        required_fields = ["assembly_point", "boundaries", "boids", "path_graph"]
-        
-        for field in required_fields:
-            if field not in data:
-                return (False, f"Missing required field: {field}")
-
-        return (True, None)
-    
     def import_map(self, data):
         boundaries = data["boundaries"]
         assembly = data["assembly_point"]
@@ -1445,6 +1460,7 @@ class BoidObject(abc.ABC):
 
         pos = self.get_pos()
 
+        """ Wrapping logic
         if pos.x > window.w:
             pos.x -= window.w
         elif pos.x < 0:
@@ -1454,10 +1470,18 @@ class BoidObject(abc.ABC):
             pos.y -= window.h
         elif pos.y < 0:
             pos.y += window.h
+        """
+
+        # Bounce logic
+        if pos.x >= window.w or pos.x <= 0:
+            self._vel[0] = -self._vel[0]
+        if pos.y >= window.h or pos.y <= 0:
+            self._vel[1] = -self._vel[1]
+
         
 class Boid(BoidObject):
     def __init__(self, sim):
-        pos = (random.randint(int(Config.SCREEN_WIDTH / Config.GENERATION_MARGIN), int((Config.SCREEN_WIDTH / Config.GENERATION_MARGIN) * (Config.GENERATION_MARGIN - 1))), random.randint(int(Config.SCREEN_HEIGHT / Config.GENERATION_MARGIN), int((Config.SCREEN_HEIGHT / Config.GENERATION_MARGIN) * (Config.GENERATION_MARGIN - 1))))
+        pos = (0, 0)
         super().__init__(sim, pos)
         self._max_speed = Config.MAX_SPEED
         self._vel = pyg.math.Vector2(1, 1)
@@ -1465,102 +1489,13 @@ class Boid(BoidObject):
 
         self.__path_behaviour = None
     
-    def assign_path(self, graph):
-        exit_id = graph.find_nearest_node(self.get_pos(), 'exit')
-        assembly_nodes = graph.get_nodes_by_type('assembly')
+    def __move(self):
+        # Ensure velocity doesn't exceed max velocity
+        if self._vel.length_squared() > (Config.MAX_SPEED ** 2):
+            self._vel.scale_to_length(Config.MAX_SPEED)
 
-        assembly_id = assembly_nodes[0].get_id()
-
-        path = graph.dijkstra(exit_id, assembly_id)
-
-        if path:
-            self.__path_behaviour = PathBehaviour(path, graph)
-
-
-    def get_pos(self):
-        return self._pos
+        self.set_pos(self.get_pos() + self._vel)
     
-    def set_pos(self, value):
-        self._pos = value
-
-    def get_vel(self):
-        return self._vel
-
-    def draw(self, screen):
-        if self.__path_behaviour:
-            path = self.__path_behaviour.get_path()
-            graph = self._sim.get_path_graph()
-
-            if graph and len(path) > 1:
-                points = []
-                for id in path:
-                    node = graph.get_node(id)
-                    if node:
-                        points.append((int(node.get_pos().x), int(node.get_pos().y)))
-                                      
-                if len(points) > 1:
-                    pyg.draw.lines(screen, (150, 150, 255), False, points, 1)    
-
-        # Calculate points of the triangle
-        phi = math.atan2(self._vel.y, self._vel.x)
-        phi2 = 0.75 * math.pi
-
-        pos = self.get_pos()
-
-        pos1 = ((pos.x + (math.cos(phi) * Config.BOID_SIZE), (pos.y + (math.sin(phi) * Config.BOID_SIZE))))
-        pos2 = ((pos.x + (math.cos(phi + phi2) * Config.BOID_SIZE), (pos.y + (math.sin(phi + phi2) * Config.BOID_SIZE))))
-        pos3 = ((pos.x + (math.cos(phi - phi2) * Config.BOID_SIZE), (pos.y + (math.sin(phi - phi2) * Config.BOID_SIZE))))
-
-        pyg.draw.polygon(screen, Config.BOID_COLOUR, (pos1, pos2, pos3))
-
-
-    def step(self):
-        current_destination = None
-        if self.__path_behaviour:
-            if not self.__path_behaviour.is_completed():
-                current_destination = self.__path_behaviour.get_current_destination()
-
-                if current_destination:
-                    distance_to_target = self.get_pos().distance_to(current_destination)
-
-                    if distance_to_target < Config.ARRIVED_RADIUS:
-                        self.__path_behaviour.advance_destination()
-                        current_destination = self.__path_behaviour.get_current_destination()
-
-        """ Remove seeking factor logic
-        seeking_factor = 0
-        if self._sim.get_assembly_point() is not None:
-            # Check target position
-            target = self._sim.get_assembly_point().get_pos()
-            # Find distance from target
-            target_vector = target - self.get_pos()
-            distance_to_target = target_vector.length()
-        
-            # If great distance from target, reduce seeking 
-            # If near to target, increase seeking
-            if distance_to_target > 300:
-                seeking_factor = 0.2
-            elif distance_to_target > 100:
-                seeking_factor = 0.4
-            else:
-                seeking_factor = 0.8
-        """
-                
-        seeking_factor = 1.2
-        
-        if current_destination:
-            self._acc += self.__avoid_boundary() * self._sim.get_config_value("avoidance")
-            self._acc += self.__separation() * self._sim.get_config_value("separation")
-            if current_destination:
-                self._acc += self.__seeking_destination(current_destination) * seeking_factor
-            self._acc += self.__alignment() * self._sim.get_config_value("alignment")
-            self._acc += self.__cohesion() * self._sim.get_config_value("cohesion")
-
-            super().step()
-
-            # Increment positions by velocity
-            self.__move()
-
     def __seeking_destination(self, destination):
         acc_request = pyg.math.Vector2(0, 0)
 
@@ -1597,13 +1532,6 @@ class Boid(BoidObject):
 
         return acc_request
         
-    def __move(self):
-        # Ensure velocity doesn't exceed max velocity
-        if self._vel.length_squared() > (Config.MAX_SPEED ** 2):
-            self._vel.scale_to_length(Config.MAX_SPEED)
-
-        self.set_pos(self.get_pos() + self._vel)
-    
     def __avoid_boundary(self):
         acc_request = pyg.math.Vector2(0, 0)
         nearby_boundaries = self.__boundaries_in_radius()
@@ -1628,13 +1556,12 @@ class Boid(BoidObject):
                 return self.__limit_force(acc_request, nearby_boundaries)
             
             else:
-                closest_point = self.__distance_to_closest_boundary_point(boundary)
+                closest_point = self.__distance_to_closest_boundary(boundary)
 
                 try:
                     dist_delta = self.get_pos() - closest_point
                     distance = self.get_pos().distance_to(closest_point)
 
-                    print(f"Delta: {dist_delta} // Distance: {distance}")
                     acc_request += dist_delta * (self._sim.get_config_value("boundary_range") / distance)
 
                 except ZeroDivisionError:
@@ -1658,7 +1585,6 @@ class Boid(BoidObject):
 
         return self.__limit_force(acc_request, neighbouring_boids)
     
-
     def __alignment(self):
         acc_request = pyg.math.Vector2(0, 0)
         neighbouring_boids = self.__boids_in_radius(self._sim.get_config_value("visual_range"))
@@ -1689,39 +1615,6 @@ class Boid(BoidObject):
         
         return self.__limit_force(acc_request, neighbouring_boids)
     
-    def __seeking(self):
-        acc_request = pyg.math.Vector2(0, 0)
-        assembly_point = self._sim.get_assembly_point()
-
-        if assembly_point is None:
-            return acc_request
-        
-        assembly_vector = assembly_point.get_pos() - self.get_pos()
-        dist = assembly_vector.length()
-
-        if dist < Config.ARRIVED_RADIUS:
-            self._reached_target = True
-            return acc_request
-
-        if dist < Config.ARRIVAL_SLOWING_RADIUS:
-            speed = self._max_speed * (dist / Config.ARRIVAL_SLOWING_RADIUS)
-        else:
-            speed = self._max_speed
-
-        # Normalise to create a direction vector
-        if assembly_vector.length_squared() > 0:
-            assembly_vector.normalize_ip()
-        else:
-            return self.__limit_force(acc_request, [self])
-        
-        # Scale to maximum speed value
-        acc_request = assembly_vector * (speed * 0.2)
-
-        # Subtract current velocity for steering force
-        acc_request -= self._vel
-
-        return acc_request * Config.DEFAULT_SEEKING_FACTOR
-
     def __boids_in_radius(self, radius):
         boids_present = []
         for surrounding_boid in self._sim.get_boid_container():
@@ -1741,7 +1634,7 @@ class Boid(BoidObject):
 
         return boundaries_present
     
-    def __distance_to_closest_boundary_point(self, boundary):
+    def __distance_to_closest_boundary(self, boundary):
         boundary_vector = boundary.get_boundary_vector()
         point_vector = boundary.get_point_vector(self.get_pos())
 
@@ -1768,19 +1661,79 @@ class Boid(BoidObject):
         
         return force
 
-class BoundaryManager:
-    def __init__(self, sim):
-        self.__current_start_pos = None
-        self.__sim = sim
+    def draw(self, screen):
+        if self.__path_behaviour:
+            path = self.__path_behaviour.get_path()
+            graph = self._sim.get_path_graph()
 
-    def set_start_pos(self, pos):
-        self.__current_start_pos = pos
+            if graph and len(path) > 1:
+                points = []
+                for id in path:
+                    node = graph.get_node(id)
+                    if node:
+                        points.append((int(node.get_pos().x), int(node.get_pos().y)))  
 
-    def get_start_pos(self):
-        return self.__current_start_pos
+        # Calculate points of the triangle
+        phi = math.atan2(self._vel.y, self._vel.x)
+        phi2 = 0.75 * math.pi
+
+        pos = self.get_pos()
+
+        pos1 = ((pos.x + (math.cos(phi) * Config.BOID_SIZE), (pos.y + (math.sin(phi) * Config.BOID_SIZE))))
+        pos2 = ((pos.x + (math.cos(phi + phi2) * Config.BOID_SIZE), (pos.y + (math.sin(phi + phi2) * Config.BOID_SIZE))))
+        pos3 = ((pos.x + (math.cos(phi - phi2) * Config.BOID_SIZE), (pos.y + (math.sin(phi - phi2) * Config.BOID_SIZE))))
+
+        pyg.draw.polygon(screen, Config.BOID_COLOUR, (pos1, pos2, pos3))
+
+    def step(self):
+        current_destination = None
+
+        if self.__path_behaviour:
+            if not self.__path_behaviour.get_completed():
+                current_destination = self.__path_behaviour.get_current_destination()
+
+                if current_destination:
+                    distance_to_target = self.get_pos().distance_to(current_destination)
+
+                    if distance_to_target < Config.ARRIVED_RADIUS:
+                        self.__path_behaviour.advance_destination()
+                        current_destination = self.__path_behaviour.get_current_destination()
+                
+        seeking_factor = 1.2
+        
+        self._acc += self.__avoid_boundary() * self._sim.get_config_value("avoidance")
+        self._acc += self.__separation() * self._sim.get_config_value("separation")
+        if current_destination is not None:
+            self._acc += self.__seeking_destination(current_destination) * seeking_factor
+        else:
+            pass
+            # self._acc += self.__seeking_destination(self._sim.get_assembly_point().get_pos()) * seeking_factor
+        self._acc += self.__alignment() * self._sim.get_config_value("alignment")
+        self._acc += self.__cohesion() * self._sim.get_config_value("cohesion")
+
+        super().step()
+
+        # Increment positions by velocity
+        self.__move()
+
+    def assign_path(self, graph):
+        exit_id = graph.find_nearest_node(self.get_pos(), 'exit')
+        assembly_nodes = graph.get_nodes_by_type('assembly')
+
+        assembly_id = assembly_nodes[0].get_id()
+        path = graph.dijkstra(exit_id, assembly_id)
+
+        if path:
+            self.__path_behaviour = PathBehaviour(path, graph)
+
+    def get_pos(self):
+        return self._pos
     
-    def clear_start_pos(self):
-        self.__current_start_pos = None
+    def get_vel(self):
+        return self._vel
+
+    def set_pos(self, value):
+        self._pos = value
 
 class Boundary:
     def __init__(self, pos):
@@ -1818,21 +1771,6 @@ class Boundary:
 
         self.__expanded_points = [top_left, top_right, bottom_right, bottom_left]
 
-    def get_expanded_points(self):
-        return self.__expanded_points
-
-    def get_pos(self):
-        return self.__pos
-    
-    def get_boundary_vector(self):
-        return self.__pos[1] - self.__pos[0]
-    
-    def get_point_vector(self, point):
-        return point - self.__pos[0]
-    
-    def get_perpendicular_vector(self):
-        return pyg.math.Vector2.rotate(self.get_boundary_vector().normalize(), 90)
-    
     def check_collision(self, boid):
         point = boid.get_pos()
 
@@ -1876,20 +1814,32 @@ class Boundary:
         # Check whether the boid path for the next frame intersects a line 
         return (closest_point is not None, closest_point)
 
+    def get_expanded_points(self):
+        return self.__expanded_points
+
+    def get_pos(self):
+        return self.__pos
+    
+    def get_boundary_vector(self):
+        return self.__pos[1] - self.__pos[0]
+    
+    def get_point_vector(self, point):
+        return point - self.__pos[0]
+    
+    def get_perpendicular_vector(self):
+        return pyg.math.Vector2.rotate(self.get_boundary_vector().normalize(), 90)
+    
 class AssemblyPoint:
     def __init__(self, pos):
         self.__pos = pos
 
-    def get_pos(self):
-        return self.__pos
-
     def draw(self, screen):
         pyg.draw.circle(screen, Config.ASSEMBLY_COLOUR, self.__pos, Config.ASSEMBLY_SIZE)
 
-class Helper:
-    def __init__(self):
-        pass
+    def get_pos(self):
+        return self.__pos
 
+class Helper:
     @staticmethod
     def lines_intersect(p1, p2, p3, p4):
         # P1/P2 = projected motion
