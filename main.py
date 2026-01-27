@@ -20,29 +20,32 @@ class Config:
 
     # Boid constants
     NUMBER_OF_BOIDS = 150
-    BOID_SIZE = 5
-    ASSEMBLY_SIZE = 25
+    BOID_SIZE = 3
+    ASSEMBLY_SIZE = 20
+    EXIT_SIZE = 10
+    DESTINATION_SIZE = 5
     BOUNDARY_THICKNESS = 3
-    BOUNDARY_RADIUS = 20
+    BOUNDARY_RADIUS = 5
     BOID_COLOUR = (255, 255, 255)
-    BOUNDARY_COLOUR = (255, 0, 0)
-    ASSEMBLY_COLOUR = (255, 255, 0)
-    EXIT_COLOUR = (0, 255, 0)
-    DESTINATION_COLOUR = (0, 150, 255)
+    BOUNDARY_COLOUR = (255, 255, 255)
+    ASSEMBLY_COLOUR = (239, 71, 111)
+    EXIT_COLOUR = (6, 214, 160)
+    DESTINATION_COLOUR = (255, 209, 102)
+    EDGE_COLOUR = (220, 220, 220)
 
     # Movement values
-    MAX_SPEED = 1
+    MAX_SPEED = 0.7
     MAX_ACC_REQUEST = 0.15
 
     # Slider values
     DEFAULT_VISUAL_RANGE = 100
-    DEFAULT_PROTECTED_RANGE = 20
+    DEFAULT_PROTECTED_RANGE = 10
     DEFAULT_BOUNDARY_RANGE = 5
     DEFAULT_SEPARATION_FACTOR = 2
-    DEFAULT_SEEKING_FACTOR = 0.3
+    DEFAULT_SEEKING_FACTOR = 1
     DEFAULT_ALIGNMENT_FACTOR = 1
     DEFAULT_COHESION_FACTOR = 1
-    DEFAULT_AVOIDANCE_FACTOR = 5
+    DEFAULT_AVOIDANCE_FACTOR = 10
     ARRIVAL_SLOWING_RADIUS = 100
     ARRIVED_RADIUS = 5
     GRAPH_EDGE_RADIUS = 150
@@ -129,11 +132,11 @@ class GUI:
         self.__active_gui = False
 
         self.__slider_keys = ["protected_range", "visual_range", "separation", "alignment", "cohesion"]
-        self.__sliders = {"protected_range": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect((0,0), self.__slider_size), start_value=Config.DEFAULT_PROTECTED_RANGE, value_range=(10, 100), manager=self.__manager), 
+        self.__sliders = {"protected_range": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect((0,0), self.__slider_size), start_value=Config.DEFAULT_PROTECTED_RANGE, value_range=(2, 100), manager=self.__manager), 
                           "visual_range": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect((0,0), self.__slider_size), start_value=Config.DEFAULT_VISUAL_RANGE, value_range=(50, 300), manager=self.__manager),
-                          "separation": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect((0,0), self.__slider_size), start_value=Config.DEFAULT_SEPARATION_FACTOR, value_range=(0.1, 3), manager=self.__manager),
-                          "alignment": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect((0,0), self.__slider_size), start_value=Config.DEFAULT_ALIGNMENT_FACTOR, value_range=(0.1, 3), manager=self.__manager),
-                          "cohesion": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect((0,0), self.__slider_size), start_value=Config.DEFAULT_COHESION_FACTOR, value_range=(0.1, 3), manager=self.__manager)}
+                          "separation": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect((0,0), self.__slider_size), start_value=Config.DEFAULT_SEPARATION_FACTOR, value_range=(0.1, 5), manager=self.__manager),
+                          "alignment": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect((0,0), self.__slider_size), start_value=Config.DEFAULT_ALIGNMENT_FACTOR, value_range=(0.1, 5), manager=self.__manager),
+                          "cohesion": pygui.elements.UIHorizontalSlider(relative_rect=pyg.Rect((0,0), self.__slider_size), start_value=Config.DEFAULT_COHESION_FACTOR, value_range=(0.1, 5), manager=self.__manager)}
         self.__slider_labels = {"protected_range": pygui.elements.UILabel(relative_rect=pyg.Rect((0,0), self.__slider_size), text=f"Protected Range: {Config.DEFAULT_PROTECTED_RANGE}"),
                                  "visual_range": pygui.elements.UILabel(relative_rect=pyg.Rect((0,0), self.__slider_size), text=f"Visual Range: {Config.DEFAULT_VISUAL_RANGE}"),
                                  "separation": pygui.elements.UILabel(relative_rect=pyg.Rect((0,0), self.__slider_size), text=f"Separation: {Config.DEFAULT_SEPARATION_FACTOR:.2f}"),
@@ -330,7 +333,6 @@ class Sim:
 
                 if self.__current_game_state == GameState.MAP_BUILDER:
                     if event.type == pyg.MOUSEBUTTONDOWN:
-
                         mouse_pos = pyg.mouse.get_pos()
 
                         for tool_id, button in self.__map_builder.get_tool_buttons().items():
@@ -389,7 +391,8 @@ class Sim:
             # boundary.draw_expanded(self.__screen)
             
         if self.__assembly_point is not None:
-            self.__assembly_point.draw(self.__screen)
+            pass
+            # self.__assembly_point.draw(self.__screen)
 
     def run(self):
         self.__running = True
@@ -518,11 +521,11 @@ class PathNode:
 
     def draw(self, screen):
         if self.__type == 'exit':
-            pyg.draw.circle(screen, Config.EXIT_COLOUR, (int(self.__pos.x), int(self.__pos.y)), 15)
+            pyg.draw.circle(screen, Config.EXIT_COLOUR, (int(self.__pos.x), int(self.__pos.y)), Config.EXIT_SIZE)
         elif self.__type == 'destination':
-            pyg.draw.circle(screen, Config.DESTINATION_COLOUR, (int(self.__pos.x), int(self.__pos.y)), 8)
+            pyg.draw.circle(screen, Config.DESTINATION_COLOUR, (int(self.__pos.x), int(self.__pos.y)), Config.DESTINATION_SIZE)
         else:
-            pyg.draw.circle(screen, Config.ASSEMBLY_COLOUR, (int(self.__pos.x), int(self.__pos.y)), 25)
+            pyg.draw.circle(screen, Config.ASSEMBLY_COLOUR, (int(self.__pos.x), int(self.__pos.y)), Config.ASSEMBLY_SIZE)
 
     def get_neighbours(self):
         return self.__neighbours
@@ -672,7 +675,7 @@ class PathGraph:
             node = self.__nodes[node_id]
             for neighbour_id in neighbours:
                 neighbour = self.__nodes[neighbour_id]
-                pyg.draw.line(screen, (100, 100, 100), (int(node.get_pos().x), int(node.get_pos().y)), (int(neighbour.get_pos().x), int(neighbour.get_pos().y)), 2)
+                pyg.draw.line(screen, Config.EDGE_COLOUR, (int(node.get_pos().x), int(node.get_pos().y)), (int(neighbour.get_pos().x), int(neighbour.get_pos().y)), 2)
                 
         for node in self.__nodes.values():
             node.draw(screen)
@@ -1485,8 +1488,8 @@ class Boid(BoidObject):
         super().__init__(sim, pos)
         self._max_speed = Config.MAX_SPEED
         self._vel = pyg.math.Vector2(1, 1)
-        self._reached_target = False
 
+        self._reached_target = False
         self.__path_behaviour = None
     
     def __move(self):
@@ -1507,7 +1510,6 @@ class Boid(BoidObject):
 
         if dist < Config.ARRIVED_RADIUS:
             return acc_request
-
 
         """
         if dist < Config.ARRIVAL_SLOWING_RADIUS:
@@ -1698,18 +1700,15 @@ class Boid(BoidObject):
                     if distance_to_target < Config.ARRIVED_RADIUS:
                         self.__path_behaviour.advance_destination()
                         current_destination = self.__path_behaviour.get_current_destination()
-                
-        seeking_factor = 1.2
         
         self._acc += self.__avoid_boundary() * self._sim.get_config_value("avoidance")
         self._acc += self.__separation() * self._sim.get_config_value("separation")
-        if current_destination is not None:
-            self._acc += self.__seeking_destination(current_destination) * seeking_factor
-        else:
-            pass
-            # self._acc += self.__seeking_destination(self._sim.get_assembly_point().get_pos()) * seeking_factor
         self._acc += self.__alignment() * self._sim.get_config_value("alignment")
         self._acc += self.__cohesion() * self._sim.get_config_value("cohesion")
+        if current_destination is not None:
+            self._acc += self.__seeking_destination(current_destination) * Config.DEFAULT_SEEKING_FACTOR
+        else:
+            self._acc += self.__seeking_destination(self._sim.get_assembly_point().get_pos()) * 0.1
 
         super().step()
 
@@ -1865,7 +1864,6 @@ class Helper:
     def clear_path(node_a, node_b, walls):
         for wall in walls:
             if Helper.lines_intersect(node_a.get_pos(), node_b.get_pos(), wall.get_pos()[0], wall.get_pos()[1]) is not None:
-                print("Lines intersect")
                 return False
             
         return True
