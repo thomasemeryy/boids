@@ -1705,6 +1705,7 @@ class Boid(BoidObject):
         self._acc += self.__separation() * self._sim.get_config_value("separation")
         self._acc += self.__alignment() * self._sim.get_config_value("alignment")
         self._acc += self.__cohesion() * self._sim.get_config_value("cohesion")
+        
         if current_destination is not None:
             self._acc += self.__seeking_destination(current_destination) * Config.DEFAULT_SEEKING_FACTOR
         else:
@@ -1742,7 +1743,7 @@ class Boundary:
         self.expand(Config.BOUNDARY_RADIUS)
         
     def draw(self, screen):
-        self.__rect = pyg.draw.line(screen, Config.BOUNDARY_COLOUR, self.__pos[0], self.__pos[1], Config.BOUNDARY_THICKNESS)
+        pyg.draw.line(screen, Config.BOUNDARY_COLOUR, self.__pos[0], self.__pos[1], Config.BOUNDARY_THICKNESS)
 
     def draw_expanded(self, screen):
         pyg.draw.polygon(screen, Config.BOID_COLOUR, self.__expanded_points, 1)
