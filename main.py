@@ -624,48 +624,40 @@ class PathGraph:
                 self.add_edge(start, end, True)
                 edges_done.append(edge_key)
 
-    def dijkstra(self, start, end):
-        if start not in self.__nodes or end not in self.__nodes:
-            return None
-        
-        distances = {id: float('inf') for id in self.__nodes}
+    def dijkstra(self, start, end):        
+        distances = [float('inf')] * len(self.__nodes)
+        previous = [None] * len(self.__nodes)
         distances[start] = 0
-        previous = {id: None for id in self.__nodes}
+        visited = [False] * len(self.__nodes)
 
-        unvisited = set(self.__nodes)
+        for i in range(len(self.__nodes)):
+            min_distance = float('inf')
+            u = None
+            for j in range(len(self.__nodes)):
+                if not visited[j] and distances[j] < min_distance:
+                    min_distance = distances[j]
+                    u = j
 
-        while unvisited:
-            current_id = None
-            smallest_distance = float('inf')
-
-            for node_id in unvisited:
-                if distances[node_id] < smallest_distance:
-                    smallest_distance = distances[node_id]
-                    current_id = node_id
-
-            if current_id is None:
+            if u is None:
                 break
 
-            unvisited.remove(current_id)
+            visited[u] = True
 
-            if current_id == end:
-                break
-
-            for neighbour_id, edge_dist in self.__adjacency_list[current_id].items():
-                if neighbour_id in unvisited:
-                    new_dist = distances[current_id] + edge_dist
-                    if new_dist < distances[neighbour_id]:
-                        distances[neighbour_id] = new_dist
-                        previous[neighbour_id] = current_id
-
-        if distances[end] == float('inf'):
-            return None
+            for v in range(len(self.__nodes)):
+                if v in self.__adjacency_list[u] and not visited[v]:
+                    new_dist = distances[u] + self.__adjacency_list[u][v]
+                    if new_dist < distances[v]:
+                        distances[v] = new_dist
+                        previous[v] = u
 
         path = []
         current = end
         while current is not None:
             path.append(current)
             current = previous[current]
+            if current == start:
+                path.append(start)
+                break
 
         path.reverse()
         return path
@@ -1705,7 +1697,7 @@ class Boid(BoidObject):
         self._acc += self.__separation() * self._sim.get_config_value("separation")
         self._acc += self.__alignment() * self._sim.get_config_value("alignment")
         self._acc += self.__cohesion() * self._sim.get_config_value("cohesion")
-        
+
         if current_destination is not None:
             self._acc += self.__seeking_destination(current_destination) * Config.DEFAULT_SEEKING_FACTOR
         else:
@@ -1855,11 +1847,18 @@ class Helper:
         if den == 0:
             return
  
-        t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / den
-        u = ((x2 - x1) * (y1 - y3) - (y2 - y1) * (x1 - x3)) / den
+        ua = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / den
+        if ua < 0 or ua > 1:
+            return None
+        
+        ub = ((x2 - x1) * (y1 - y3) - (y2 - y1) * (x1 - x3)) / den
+        if ub < 0 or ub > 1:
+            return None
 
-        if 0 < t < 1 and 0 < u < 1:
-            return pyg.Vector2(x1 + t * (x2 - x1), y1 + t * (y2 - y1))
+        x = x1 + ua * (x2 - x1)
+        y = y1 + ua * (y2 - y1)
+
+        return pyg.Vector2(x, y)
         
     @staticmethod
     def clear_path(node_a, node_b, walls):
