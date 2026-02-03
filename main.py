@@ -837,7 +837,7 @@ class Menu:
             self.__sim.get_map_builder().set_unchanged()
 
         else:
-            print(f"Load failed with: {error}")
+            print(f"A loading error occurred: {error}")
 
         self.__sim.get_gui().disable_active_gui()
 
@@ -991,7 +991,7 @@ class MapBuilder:
         if success:
             self.__sim.set_game_state('menu')
         else:
-            print(f"Save failed: {error}")
+            print(f"A save error occurred: {error}")
             self.__sim.set_game_state("menu")
 
     def __import_image(self):
@@ -1206,7 +1206,7 @@ class MapBuilder:
                 self.__tracing_img = filtered
 
             except Exception as e:
-                print(f"Error loading image: {e}")
+                print(f"An image error occurred: {e}")
 
     def handle_click(self, pos, button):
         if self.__sim.get_gui().get_active() is False:
@@ -1344,39 +1344,23 @@ class JSONManager:
                 path += '.json'
 
             map_data = {
-                "map_name": os.path.basename(path).split(".")[0],
-                "created": datetime.datetime.now().isoformat(),
+                "map_name": os.path.basename(path).split(".")[0], "created": datetime.datetime.now().isoformat(),
                 "map_image": img_path,
-                "assembly_point": {
-                    "x": int(assembly.get_pos()[0]),
-                    "y": int(assembly.get_pos()[1]),
-                },
-                "boundaries": [],
-                "boids": [], 
-                "graph": graph if graph else None
-            }
+                "assembly_point": {"x": int(assembly.get_pos()[0]), "y": int(assembly.get_pos()[1])},
+                "boundaries": [], "boids": [], 
+                "graph": graph if graph else None}
 
             # Add boundaries to JSON
             for boundary in boundaries:
                 start, end = boundary.get_pos()
                 map_data["boundaries"].append({
-                    "start": {
-                        "x": int(start[0]),
-                        "y": int(start[1])
-                    },
-                    "end": {
-                        "x": int(end[0]),
-                        "y": int(end[1])
-                    }
-                })
+                    "start": {"x": int(start[0]), "y": int(start[1])},
+                    "end": {"x": int(end[0]), "y": int(end[1])}})
 
             # Add boids to JSON
             for boid in boids:
                 pos = boid.get_pos()
-                map_data["boids"].append({
-                    "x": int(pos[0]),
-                    "y": int(pos[1])
-                })
+                map_data["boids"].append({"x": int(pos[0]), "y": int(pos[1])})
 
             with open(path, 'w') as file:
                 json.dump(map_data, file)
@@ -1384,45 +1368,41 @@ class JSONManager:
             return (True, None)
 
         except Exception as e:
-            return (False, f"An error occurred: {str(e)}")
+            return (False, f"A saving error occurred: {str(e)}")
         
     @staticmethod
     def load_map(path):
         try:
             with open(path, 'r') as file:
-                map_data = json.load(file)
+                data = json.load(file)
 
             # Validate loaded data
-            is_valid = JSONManager.__validate_data(map_data)
+            is_valid = JSONManager.__validate_data(data)
             if not is_valid[0]:
                 return (False, None, is_valid[1])
             
-            parsed_data = {
-                "boundaries": [],
-                "assembly_point": None,
-                "boids": [],
-                "graph": map_data.get("graph", None),
-                "map_image": map_data.get("map_image", None)
-            }
+            parsed = {
+                "boundaries": [], "assembly_point": None, "boids": [],
+                "graph": data.get("graph", None),
+                "map_image": data.get("map_image", None)}
 
             # Assembly point
-            parsed_data["assembly_point"] = (map_data["assembly_point"]["x"], map_data["assembly_point"]["y"])
+            parsed["assembly_point"] = (data["assembly_point"]["x"], data["assembly_point"]["y"])
 
             # Boundaries
-            for boundary in map_data["boundaries"]:
+            for boundary in data["boundaries"]:
                 start = (boundary["start"]["x"], boundary["start"]["y"])
                 end = (boundary["end"]["x"], boundary["end"]["y"])
-                parsed_data["boundaries"].append((start, end))
-
+                parsed["boundaries"].append((start, end))
 
             # Boids
-            for boid in map_data["boids"]:
-                parsed_data["boids"].append((boid["x"], boid["y"]))
+            for boid in data["boids"]:
+                parsed["boids"].append((boid["x"], boid["y"]))
 
-            return (True, parsed_data, None)
+            return (True, parsed, None)
 
         except Exception as e:
-            return (False, None, f"An error occurred: {str(e)}")
+            return (False, None, f"A loading error occurred: {str(e)}")
         
     def import_map(self, data):
         boundaries = data["boundaries"]
