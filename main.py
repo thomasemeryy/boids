@@ -567,21 +567,23 @@ class Graph:
 
         distance = node_a.get_pos().distance_to(node_b.get_pos())
 
-        self.__adjacency_list[id_a][id_b] = distance
-        node_a.add_neighbour(id_b, distance)
-
-        if bi:
+        if not bi:
+            self.__adjacency_list[id_a][id_b] = distance
+            node_a.add_neighbour(id_b, distance)
+        elif bi:
+            self.__adjacency_list[id_a][id_b] = distance
+            node_a.add_neighbour(id_b, distance)
             self.__adjacency_list[id_b][id_a] = distance
             node_b.add_neighbour(id_a, distance)
 
     def remove_node(self, id):
         if id in self.__nodes:
-            del self.__nodes[id]
-            del self.__adjacency_list[id]
+            self.__nodes.pop(id)
+            self.__adjacency_list.pop(id)
 
             for neighbours in self.__adjacency_list.values():
                 if id in neighbours:
-                    del neighbours[id]
+                    neighbours.pop(id)
 
     def find_nearest_node(self, pos, type):
         remaining_checks = list(self.__nodes.values())
@@ -700,7 +702,12 @@ class Graph:
         return self.__adjacency_list
         
     def get_nodes_by_type(self, type):
-        return [node for node in self.__nodes.values() if node.get_type() == type]
+        filtered_nodes = []
+        for node in self.__nodes.values():
+            if node.get_type() == type:
+                filtered_nodes.append(node)
+
+        return filtered_nodes
 
     def get_all_nodes(self):
         return self.__nodes
@@ -732,7 +739,10 @@ class Pathfinding:
         id = self.__path[self.__current_destination_index]
         node = self.__graph.get_node(id)
 
-        return node.get_pos() if node else None
+        if node:
+            return node.get_pos()
+        else:
+            return None
 
     def get_path(self):
         return self.__path
@@ -962,18 +972,11 @@ class MapBuilder:
             print("No path entered")
             return
 
-        if not path.endswith('.json'):
-            path += '.json'
+        if path[-5:] != ".json":
+            path += ".json"
 
-        maps_dir = os.path.join(os.getcwd(), Config.MAPS_FOLDER)
-        if maps_dir and not os.path.exists(maps_dir):
-            try:
-                os.makedirs(maps_dir)
-            except Exception as e:
-                print(f"Error creating directory:\n{str(e)}")
-                return
-            
-        path = os.path.join(maps_dir, path)
+        save_location = os.path.join(os.getcwd(), Config.MAPS_FOLDER)
+        path = os.path.join(save_location, path)
             
         graph = self.__builder_graph.to_json()
         self.__sim.import_graph(graph)
@@ -1202,8 +1205,8 @@ class MapBuilder:
                 filtered = self.__apply_filter(scaled)
                 self.__tracing_img = filtered
 
-            except Exception as exception:
-                print(f"Error loading image with error: {exception}")
+            except Exception as e:
+                print(f"Error loading image: {e}")
 
     def handle_click(self, pos, button):
         if self.__sim.get_gui().get_active() is False:
@@ -1375,37 +1378,25 @@ class JSONManager:
                     "y": int(pos[1])
                 })
 
-            # Write to file
             with open(path, 'w') as file:
                 json.dump(map_data, file)
 
             return (True, None)
 
-        except PermissionError:
-            return (False, f"Insufficient permission to write to {path}")
-        except IOError as e:
-            return (False, f"File write error: {str(e)}")
         except Exception as e:
-            return (False, f"An unexpected error occurred: {str(e)}")
+            return (False, f"An error occurred: {str(e)}")
         
     @staticmethod
     def load_map(path):
         try:
-            if not os.path.exists(path):
-                return (False, None, f"File could not be found at: {path}")
-
-            if not path.lower().endswith('.json'):
-                return (False, None, f"File must end with .json")
-            
             with open(path, 'r') as file:
                 map_data = json.load(file)
 
             # Validate loaded data
             is_valid = JSONManager.__validate_data(map_data)
             if not is_valid[0]:
-                return (False, None, is_valid[1]) # Return error message
+                return (False, None, is_valid[1])
             
-            # Parse data
             parsed_data = {
                 "boundaries": [],
                 "assembly_point": None,
@@ -1430,14 +1421,8 @@ class JSONManager:
 
             return (True, parsed_data, None)
 
-        except json.JSONDecodeError as e:
-            return (False, None, f"Invalid JSON format: {str(e)}")
-        except PermissionError:
-            return (False, None, f"Insufficient permission to read from {path}")
-        except IOError as e:
-            return (False, None, f"File read error: {str(e)}")
         except Exception as e:
-            return (False, None, f"An unexpected error occurred: {str(e)}")
+            return (False, None, f"An error occurred: {str(e)}")
         
     def import_map(self, data):
         boundaries = data["boundaries"]
