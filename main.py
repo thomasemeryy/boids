@@ -237,7 +237,7 @@ class Sim:
         self.__menu = Menu(self)
         self.__map_builder = MapBuilder(self)
         self.__playback_controls = PlaybackControls(self)
-        self.__path_graph = PathGraph()
+        self.__graph = Graph()
 
         # Instantiate object containers
         self.__assembly_point = None
@@ -258,7 +258,7 @@ class Sim:
         pyg.display.set_icon(pyg.image.load(f"{Config.IMAGES_FOLDER}/window_icon.png"))
 
     def import_graph(self, graph):
-        self.__path_graph.load_json(graph)
+        self.__graph.load_json(graph)
     
     def import_objects_to_sim(self, boundaries, assembly, boids, img):
         self.reset_simulation()
@@ -280,10 +280,10 @@ class Sim:
         self.__boid_container = []
         self.__boundary_container = []
         self.__assembly_point = None
-        self.__path_graph.clear()
+        self.__graph.clear()
 
     def enable_pathfinding(self):
-        graph = self.__path_graph
+        graph = self.__graph
 
         for boid in self.__boid_container:
             boid.assign_path(graph)
@@ -432,8 +432,8 @@ class Sim:
     def get_config_value(self, type):
         return self.__config_values[type]
     
-    def get_path_graph(self):
-        return self.__path_graph
+    def get_graph(self):
+        return self.__graph
     
     def get_map_builder(self):
         return self.__map_builder
@@ -512,7 +512,7 @@ class Sim:
     def set_map_unloaded(self):
         self.__map_loaded = False
 
-class PathNode:
+class Node:
     def __init__(self, pos, type, id):
         self.__pos = pyg.math.Vector2(pos)
         self.__type = type
@@ -542,7 +542,7 @@ class PathNode:
     def add_neighbour(self, id, distance):
         self.__neighbours[id] = distance
 
-class PathGraph:
+class Graph:
     def __init__(self):
         self.__nodes = {}
         self.__next_id = 0
@@ -552,7 +552,7 @@ class PathGraph:
         id = self.__next_id
         self.__next_id += 1
 
-        node = PathNode(pos, type, id)
+        node = Node(pos, type, id)
         self.__nodes[id] = node
         self.__adjacency_list[id] = {}
 
@@ -705,7 +705,7 @@ class PathGraph:
     def get_all_nodes(self):
         return self.__nodes
     
-class PathBehaviour:
+class Pathfinding:
     def __init__(self, path, graph):
         self.__path = path
         self.__graph = graph
@@ -890,7 +890,7 @@ class MapBuilder:
         self.__builder_boundaries = []
         self.__builder_assembly = None
         self.__builder_boids = []
-        self.__builder_graph = PathGraph()
+        self.__builder_graph = Graph()
 
         # Manage tool states
         self.__current_tool = None
@@ -932,7 +932,7 @@ class MapBuilder:
             self.__confirm_buttons["cancel"] = Button(Config.CONFIRM_X - 55, Config.CONFIRM_Y, f"{Config.IMAGES_FOLDER}/cancel_button.png", 0.3)
 
     def __import_graph_to_sim(self):
-        sim_graph = self.__sim.get_path_graph()
+        sim_graph = self.__sim.get_graph()
         sim_graph.clear()
 
         node_map = {}
@@ -1326,7 +1326,7 @@ class JSONManager:
 
     @staticmethod
     def __validate_data(data):
-        required_fields = ["assembly_point", "boundaries", "boids", "path_graph"]
+        required_fields = ["assembly_point", "boundaries", "boids", "graph"]
         
         for field in required_fields:
             if field not in data:
@@ -1350,7 +1350,7 @@ class JSONManager:
                 },
                 "boundaries": [],
                 "boids": [], 
-                "path_graph": graph if graph else None
+                "graph": graph if graph else None
             }
 
             # Add boundaries to JSON
@@ -1410,7 +1410,7 @@ class JSONManager:
                 "boundaries": [],
                 "assembly_point": None,
                 "boids": [],
-                "path_graph": map_data.get("path_graph", None),
+                "graph": map_data.get("graph", None),
                 "map_image": map_data.get("map_image", None)
             }
 
@@ -1443,7 +1443,7 @@ class JSONManager:
         boundaries = data["boundaries"]
         assembly = data["assembly_point"]
         boids = data["boids"]
-        graph = data["path_graph"]
+        graph = data["graph"]
         tracing_image = data["map_image"]
         self.__sim.import_objects_to_builder(boundaries, assembly, boids, graph, tracing_image)
             
@@ -1494,7 +1494,7 @@ class Boid(BoidObject):
         self._vel = pyg.math.Vector2(1, 1)
 
         self._reached_target = False
-        self.__path_behaviour = None
+        self.__pathfinding = None
     
     def __move(self):
         # Ensure velocity doesn't exceed max velocity
@@ -1668,9 +1668,9 @@ class Boid(BoidObject):
         return force
 
     def draw(self, screen):
-        if self.__path_behaviour:
-            path = self.__path_behaviour.get_path()
-            graph = self._sim.get_path_graph()
+        if self.__pathfinding:
+            path = self.__pathfinding.get_path()
+            graph = self._sim.get_graph()
 
             if graph and len(path) > 1:
                 points = []
@@ -1694,16 +1694,16 @@ class Boid(BoidObject):
     def step(self):
         current_destination = None
 
-        if self.__path_behaviour:
-            if not self.__path_behaviour.get_completed():
-                current_destination = self.__path_behaviour.get_current_destination()
+        if self.__pathfinding:
+            if not self.__pathfinding.get_completed():
+                current_destination = self.__pathfinding.get_current_destination()
 
                 if current_destination:
                     distance_to_target = self.get_pos().distance_to(current_destination)
 
                     if distance_to_target < Config.ARRIVED_RADIUS:
-                        self.__path_behaviour.advance_destination()
-                        current_destination = self.__path_behaviour.get_current_destination()
+                        self.__pathfinding.advance_destination()
+                        current_destination = self.__pathfinding.get_current_destination()
         
         self._acc += self.__avoid_boundary() * self._sim.get_config_value("avoidance")
         self._acc += self.__separation() * self._sim.get_config_value("separation")
@@ -1728,7 +1728,7 @@ class Boid(BoidObject):
         path = graph.dijkstra(exit_id, assembly_id)
 
         if path:
-            self.__path_behaviour = PathBehaviour(path, graph)
+            self.__pathfinding = Pathfinding(path, graph)
 
     def get_pos(self):
         return self._pos
