@@ -584,16 +584,28 @@ class PathGraph:
                     del neighbours[id]
 
     def find_nearest_node(self, pos, type):
-        remaining_checks = self.__nodes.values()
+        remaining_checks = list(self.__nodes.values())
 
         if type:
-            remaining_checks = [n for n in remaining_checks if n.get_type() == type]
+            temp = remaining_checks.copy()
+            for node in temp:
+                if node.get_type() == type:
+                    pass
+                else:
+                    remaining_checks.remove(node)
 
         if not remaining_checks:
             return None
         
-        nearest = min(remaining_checks, key=lambda n: pos.distance_squared_to(n.get_pos()))
-        return nearest.get_id()  
+        smallest_dist = float('inf')
+        nearest = None
+        for node in remaining_checks:
+            dist_squared = pos.distance_squared_to(node.get_pos())
+            if dist_squared < smallest_dist:
+                smallest_dist = dist_squared
+                nearest = node
+
+        return nearest.get_id()
 
     def to_json(self):
         json_dict = {
