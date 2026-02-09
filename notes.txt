@@ -1,0 +1,1 @@
+The project requires the pygame and pygame_gui libraries, as well as the maps/ and images/ folders and respective files (or the adjustment of constants in main.py).

@@ -1427,7 +1427,7 @@ class BoidObject(abc.ABC):
 
         self._acc = pyg.math.Vector2(0, 0)
 
-        # Boids wrap around window
+        # Boids bounce against window
         window = self._sim.get_window()
 
         pos = self.get_pos()
